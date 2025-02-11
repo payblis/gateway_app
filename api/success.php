@@ -14,74 +14,63 @@ error_log("GET: " . print_r($_GET, true));
 error_log("POST: " . print_r($_POST, true));
 
 // Récupérer les paramètres de l'URL
-$TransId = $_GET['transactionId'] ?? null; // Changé pour matcher le paramètre réel
-$Status = $_GET['status'] ?? null;         // Changé pour matcher le paramètre réel
+$merchantRef = $_GET['MerchantRef'] ?? null;
+$amount = $_GET['Amount'] ?? null;
+$transId = $_GET['TransId'] ?? null;
+$status = $_GET['Status'] ?? null;
 
-error_log("TransId: " . $TransId);
-error_log("Status: " . $Status);
+if ($merchantRef && $transId) {
+    try {
+        // 1. Mettre à jour le statut de la transaction
+        $stmt = $connection->prepare("SELECT * FROM transactions WHERE ref_order = ?");
+        $stmt->bind_param("s", $merchantRef);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $transaction = $result->fetch_assoc();
 
-// Récupérer les informations de la transaction depuis ovri_logs
-if ($TransId) {
-    $query = "SELECT * FROM ovri_logs WHERE transaction_id = ?";
-    $stmt = $connection->prepare($query);
-    $stmt->bind_param("s", $TransId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows > 0) {
-        error_log("Transaction trouvée dans ovri_logs");
-        $logData = $result->fetch_assoc();
-        $requestData = json_decode($logData['request_body'], true);
-        
-        // Récupérer MerchantRef et Amount depuis les données stockées
-        $MerchantRef = $requestData['RefOrder'] ?? null;
-        $amount = $requestData['amount'] ?? null;
-        
-        error_log("MerchantRef: " . $MerchantRef);
-        error_log("Amount: " . $amount);
-        
-        if ($MerchantRef) {
-            // Mettre à jour le statut dans transactions
-            $updateQuery = "UPDATE transactions SET status = 'paid' WHERE ref_order = ?";
-            $updateStmt = $connection->prepare($updateQuery);
-            $updateStmt->bind_param("s", $MerchantRef);
-            $updateStmt->execute();
-            error_log("Statut mis à jour dans transactions");
-            
-            // Préparer les données pour l'IPN
-            $transactionData = [
-                'MerchantRef' => $MerchantRef,
-                'Amount' => $amount,
-                'TransId' => $TransId,
-                'Status' => $Status
-            ];
-            
-            error_log("Données IPN préparées: " . print_r($transactionData, true));
-            
-            // Appeler sendIpnNotification
-            try {
-                error_log("Tentative d'envoi IPN");
-                $ipnResult = sendIpnNotification($transactionData);
-                error_log("Résultat IPN: " . ($ipnResult ? "Succès" : "Échec"));
-            } catch (Exception $e) {
-                error_log("Erreur IPN: " . $e->getMessage());
-            }
-            
-            // Redirection
-            if (isset($requestData['urlOK'])) {
-                $redirectUrl = $requestData['urlOK'] . 
-                             '?MerchantRef=' . urlencode($MerchantRef) . 
-                             '&Amount=' . urlencode($amount) . 
-                             '&TransId=' . urlencode($TransId) . 
-                             '&Status=Success';
+        if ($transaction) {
+            // 2. Mettre à jour uniquement si le statut est toujours pending3ds
+            if ($transaction['status'] === 'pending3ds') {
+                $updateStmt = $connection->prepare("UPDATE transactions SET status = ?, transaction_id = ? WHERE ref_order = ?");
+                $newStatus = "paid";
+                $updateStmt->bind_param("sss", $newStatus, $transId, $merchantRef);
+                $updateStmt->execute();
+
+                // 3. Récupérer les données utilisateur pour l'IPN
+                $userData = unserialize($transaction['user_data']);
                 
-                error_log("Redirection vers: " . $redirectUrl);
-                header('Location: ' . $redirectUrl);
-                exit;
+                // 4. Préparer et envoyer l'IPN
+                $ipnData = [
+                    'TransId' => $transId,
+                    'MerchantRef' => $merchantRef,
+                    'Amount' => $amount,
+                    'Status' => 'Success',
+                    'ipnURL' => $userData['ipnURL'] ?? null,
+                    'MerchantKey' => $userData['MerchantKey'] ?? null
+                ];
+
+                error_log("Tentative d'envoi IPN depuis success.php après 3DS - Status: Success");
+                
+                try {
+                    $ipnResult = sendIpnNotification($ipnData);
+                    error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+                } catch (Exception $e) {
+                    error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+                }
+
+                // 5. Rediriger vers l'URL de succès du marchand
+                if (isset($userData['urlOK'])) {
+                    header('Location: ' . $userData['urlOK']);
+                    exit;
+                }
+            } else {
+                error_log("Transaction déjà traitée avec le statut: " . $transaction['status']);
             }
+        } else {
+            error_log("Transaction non trouvée pour le MerchantRef: " . $merchantRef);
         }
-    } else {
-        error_log("Aucune transaction trouvée pour TransId: " . $TransId);
+    } catch (Exception $e) {
+        error_log("Erreur lors du traitement du retour 3DS: " . $e->getMessage());
     }
 }
 
