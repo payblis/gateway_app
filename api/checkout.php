@@ -127,15 +127,21 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
+    // Décoder les données utilisateur pour obtenir ipnURL et MerchantKey
+    $decodedData = unserialize(urldecode($userdata));
+    
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
     $ipnData = [
         'TransId' => $resultDecode['TransactionId'],
         'MerchantRef' => $RefOrder,
         'Amount' => $amount,
-        'Status' => 'Success'
+        'Status' => 'Success',
+        'ipnURL' => $decodedData['ipnURL'] ?? null,
+        'MerchantKey' => $decodedData['MerchantKey'] ?? null
     ];
     
     try {
+        usleep(100000); // 100ms pause
         $ipnResult = sendIpnNotification($ipnData);
         error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
     } catch (Exception $e) {
