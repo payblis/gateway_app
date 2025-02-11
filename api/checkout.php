@@ -7,31 +7,28 @@ error_log("POST data reçues: " . print_r($_POST, true));
 error_log("GET data reçues: " . print_r($_GET, true));
 
 try {
-    // Récupération des données de la transaction
-    $transactionId = $_POST['transaction_id'] ?? null;
-    error_log("Transaction ID: " . $transactionId);
-
-    if ($transactionId) {
-        $query = "SELECT * FROM ovri_logs WHERE transaction_id = ?";
-        $stmt = $connection->prepare($query);
-        $stmt->bind_param("s", $transactionId);
-        $stmt->execute();
-        $result = $stmt->get_result();
+    // Décoder les données sérialisées
+    if (isset($_POST['array'])) {
+        $decodedData = urldecode($_POST['array']);
+        $requestData = unserialize($decodedData);
+        error_log("Données désérialisées: " . print_r($requestData, true));
         
-        if ($result->num_rows > 0) {
-            error_log("Transaction trouvée dans ovri_logs");
-            $transaction = $result->fetch_assoc();
-            $requestData = json_decode($transaction['request_body'], true);
+        // Récupérer l'ID inséré
+        $insertedId = $_POST['inserted_id'] ?? null;
+        error_log("ID inséré: " . $insertedId);
+        
+        if ($insertedId) {
+            // Générer un ID de transaction unique
+            $transactionId = 'OVRI-' . date('Ymd') . time() . '-' . uniqid();
+            error_log("Transaction ID généré: " . $transactionId);
             
-            error_log("Données de la transaction: " . print_r($requestData, true));
-            
-            // Mise à jour du statut
+            // Mettre à jour ovri_logs avec le transaction_id
             $updateQuery = "UPDATE ovri_logs 
-                          SET response_body = ?, http_code = ? 
-                          WHERE transaction_id = ?";
-            $stmt = $connection->prepare($updateQuery);
+                          SET transaction_id = ?,
+                              response_body = ?,
+                              http_code = ? 
+                          WHERE id = ?";
             
-            // Simuler la réponse d'OVRI
             $responseData = [
                 "status" => "success",
                 "transaction_id" => $transactionId,
@@ -41,14 +38,13 @@ try {
             $responseJson = json_encode($responseData);
             $httpCode = 200;
             
-            $stmt->bind_param("sis", $responseJson, $httpCode, $transactionId);
-            $stmt->execute();
+            $stmt = $connection->prepare($updateQuery);
+            $stmt->bind_param("ssii", $transactionId, $responseJson, $httpCode, $insertedId);
             
-            error_log("Réponse enregistrée dans ovri_logs");
-            
-            // Envoi de l'IPN
-            if ($httpCode === 200) {
-                error_log("Tentative d'envoi IPN depuis checkout.php");
+            if ($stmt->execute()) {
+                error_log("Transaction ID mis à jour dans ovri_logs");
+                
+                // Envoi de l'IPN
                 $ipnData = [
                     'TransId' => $transactionId,
                     'MerchantRef' => $requestData['RefOrder'],
@@ -62,19 +58,20 @@ try {
                 } catch (Exception $e) {
                     error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
                 }
+                
+                // Redirection simple sans paramètres
+                $redirectUrl = $httpCode === 200 ? $requestData['urlOK'] : $requestData['urlKO'];
+                error_log("Redirection vers: " . $redirectUrl);
+                header("Location: " . $redirectUrl);
+                exit;
+            } else {
+                error_log("Erreur lors de la mise à jour de ovri_logs: " . $stmt->error);
+                throw new Exception("Erreur lors de la mise à jour");
             }
-            
-            // Redirection simple sans paramètres
-            $redirectUrl = $httpCode === 200 ? $requestData['urlOK'] : $requestData['urlKO'];
-            error_log("Redirection vers: " . $redirectUrl);
-            header("Location: " . $redirectUrl);
-            exit;
-        } else {
-            error_log("Transaction non trouvée dans ovri_logs");
-            // Redirection vers la page d'erreur par défaut
-            header("Location: failed.php");
-            exit;
         }
+    } else {
+        error_log("Aucune donnée sérialisée reçue");
+        throw new Exception("Données manquantes");
     }
 } catch (Exception $e) {
     error_log("Erreur dans checkout.php: " . $e->getMessage());
