@@ -2,10 +2,11 @@
 error_log("=== DÉBUT FAILED.PHP ===");
 require('../admin/include/config.php');
 
-// Log des paramètres reçus
+// Log de toutes les données reçues
 error_log("GET params: " . print_r($_GET, true));
 error_log("POST params: " . print_r($_POST, true));
 
+// Récupération des paramètres
 $transactionId = $_GET['transactionId'] ?? null;
 $error = $_GET['error'] ?? 'Unknown error';
 
@@ -47,9 +48,17 @@ if ($transactionId) {
             $requestData = json_decode($row['request_body'], true);
             
             if (isset($requestData['urlKO'])) {
-                // Redirection simple vers urlKO sans paramètres
-                error_log("Redirection vers URL KO: " . $requestData['urlKO']);
-                header("Location: " . $requestData['urlKO']);
+                $redirectUrl = $requestData['urlKO'];
+                if (strpos($redirectUrl, '?') === false) {
+                    $redirectUrl .= '?';
+                } else {
+                    $redirectUrl .= '&';
+                }
+                $redirectUrl .= 'error=' . urlencode($error) . 
+                               '&transactionId=' . urlencode($transactionId);
+                
+                error_log("Redirection vers URL KO: " . $redirectUrl);
+                header("Location: " . $redirectUrl);
                 exit;
             }
         }
@@ -58,7 +67,8 @@ if ($transactionId) {
     }
 }
 
-error_log("=== FIN FAILED.PHP ===");
+// Si on arrive ici, c'est qu'on n'a pas pu rediriger vers l'URL KO
+error_log("=== FIN FAILED.PHP - Affichage page d'erreur par défaut ===");
 ?>
 <!DOCTYPE html>
 <html>
@@ -67,6 +77,9 @@ error_log("=== FIN FAILED.PHP ===");
 </head>
 <body>
     <h1>Payment Failed</h1>
-    <p>An error occurred during the payment process.</p>
+    <p>Error: <?php echo htmlspecialchars($error); ?></p>
+    <?php if ($transactionId): ?>
+        <p>Transaction ID: <?php echo htmlspecialchars($transactionId); ?></p>
+    <?php endif; ?>
 </body>
-</html>
+</html> 

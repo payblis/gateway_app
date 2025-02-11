@@ -15,17 +15,10 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
     error_log("[IPN] TransactionId: " . $transactionId);
     
     try {
-        // Vérifions d'abord la structure de la table
-        $checkTable = $connection->query("SHOW CREATE TABLE ipn_logs");
-        error_log("[IPN] Structure de la table: " . print_r($checkTable->fetch_row(), true));
-        
-        // Simplifions la requête pour éviter les problèmes de bind_param
-        $query = "INSERT INTO ipn_logs SET 
-                 transaction_id = ?,
-                 payload = ?,
-                 response_code = ?,
-                 response = ?,
-                 status = ?";
+        // Requête correspondant exactement à la structure de la table
+        $query = "INSERT INTO ipn_logs 
+                 (transaction_id, payload, response_code, response, status, retry_count) 
+                 VALUES (?, ?, ?, ?, ?, 0)";
         
         $stmt = $connection->prepare($query);
         if (!$stmt) {
@@ -43,7 +36,8 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
         error_log("[IPN] - response: " . $response);
         error_log("[IPN] - status: " . $status);
         
-        // Vérifions que nous avons le bon nombre de paramètres
+        // bind_param avec seulement les champs nécessaires
+        // s = string, i = integer, s = string, s = string, s = string (status)
         if (!$stmt->bind_param("ssiss", 
             $transactionId,
             $payloadJson,
@@ -56,7 +50,8 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
         }
         
         if (!$stmt->execute()) {
-            error_log("[IPN] Erreur execution: " . $stmt->error);
+            error_log("[IPN] Erreur execution: " . $stmt->error . 
+                      "\nDernière requête: " . $query);
             return false;
         }
         
@@ -77,23 +72,32 @@ function sendIpnNotification($transactionData) {
     error_log("[IPN] Données reçues: " . print_r($transactionData, true));
     
     try {
-        // Récupérer les données de la transaction depuis ovri_logs
-        $query = "SELECT request_body FROM ovri_logs WHERE transaction_id = ?";
+        // Récupérer les données de la transaction
+        $query = "SELECT request_body, response_body FROM ovri_logs WHERE transaction_id = ?";
         $stmt = $connection->prepare($query);
+        
+        if (!$stmt) {
+            error_log("[IPN] Erreur préparation requête ovri_logs: " . $connection->error);
+            return false;
+        }
+        
         $stmt->bind_param("s", $transactionData['TransId']);
         $stmt->execute();
         $result = $stmt->get_result();
         
-        if ($result->num_rows === 0) {
-            error_log("[IPN] Transaction non trouvée dans ovri_logs");
+        if (!$result || $result->num_rows === 0) {
+            error_log("[IPN] Aucune donnée trouvée dans ovri_logs");
             return false;
         }
         
-        $row = $result->fetch_assoc();
-        $requestData = json_decode($row['request_body'], true);
+        $logData = $result->fetch_assoc();
+        $requestData = json_decode($logData['request_body'], true);
+        $responseData = json_decode($logData['response_body'], true);
         
-        if (!isset($requestData['ipnURL'])) {
-            error_log("[IPN] URL IPN non définie");
+        error_log("[IPN] Données de requête: " . print_r($requestData, true));
+        
+        if (empty($requestData['ipnURL'])) {
+            error_log("[IPN] Pas d'URL IPN définie");
             return false;
         }
         
@@ -105,9 +109,9 @@ function sendIpnNotification($transactionData) {
             'amount' => $transactionData['Amount'],
             'status' => $transactionData['Status'],
             'payment_details' => [
-                'card_brand' => 'VISA',
-                'card_last4' => substr($_POST['cardno'] ?? '', -4),
-                'authorization_code' => '000000',
+                'card_brand' => $responseData['receipt']['cardbrand'] ?? 'VISA',
+                'card_last4' => substr($responseData['receipt']['cardpan'] ?? '', -4),
+                'authorization_code' => $responseData['receipt']['authorization'] ?? '000000',
                 'transaction_date' => date('Y-m-d H:i:s')
             ]
         ];
@@ -133,11 +137,15 @@ function sendIpnNotification($transactionData) {
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         
-        error_log("[IPN] Réponse reçue - Code: " . $httpCode . ", Corps: " . $response);
+        if ($response === false) {
+            error_log("[IPN] Erreur CURL: " . curl_error($ch));
+        } else {
+            error_log("[IPN] Réponse reçue - Code: " . $httpCode . ", Corps: " . $response);
+        }
         
         curl_close($ch);
         
-        // Enregistrer la tentative d'IPN
+        // Enregistrer la tentative
         logIpnAttempt($transactionData['TransId'], $notificationData, $httpCode, $response);
         
         return $httpCode === 200;
