@@ -126,7 +126,11 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location:' . $urlOK . '?code=' . $resultDecode['code'] . '&transactionId=' . $resultDecode['TransactionId'] . '&status=' . $resultDecode['status']);
+    // Envoyer la notification IPN avant la redirection
+    sendIpnNotification($resultDecode, $MyVars);
+
+    // Redirection simple vers urlOK sans paramètres
+    header('Location: ' . $urlOK);
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -136,7 +140,8 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
+    // Redirection simple vers urlKO sans paramètres
+    header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'FATAL-500') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -146,10 +151,9 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
-}
-
-elseif ($resultDecode['code'] == 'failed') {
+    // Redirection simple vers urlKO sans paramètres
+    header('Location: ' . $urlKO);
+} elseif ($resultDecode['code'] == 'failed') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
 
@@ -158,7 +162,8 @@ elseif ($resultDecode['code'] == 'failed') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&truedecline=' . $resultDecode['truedecline'].'&errors=Invalid card number');
+    // Redirection simple vers urlKO sans paramètres
+    header('Location: ' . $urlKO);
 }
 
 elseif ($resultDecode['code'] == 'pending3ds') {
