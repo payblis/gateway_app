@@ -286,36 +286,77 @@ if ($resultDecode['code'] == 'success') {
     $http_code = 101;
     updatelogs($MyVars, $resultDecode, $http_code);
 
-    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Pending3DS");
+    error_log("=== TRAITEMENT 3DS ===");
+    error_log("Données complètes 3DS: " . print_r($resultDecode, true));
     
     // Décodage des données
     $decodedData = unserialize(urldecode($userdata));
+    error_log("Données merchant décodées: " . print_r($decodedData, true));
+    
+    // Récupérer le TransactionId depuis la réponse OVRI
+    $transactionId = $resultDecode['transactionId'] ?? 
+                    $resultDecode['TransactionId'] ?? 
+                    $resultDecode['transaction_id'] ?? 
+                    null;
+    
+    error_log("TransactionId extrait: " . ($transactionId ?? 'NON TROUVÉ'));
     
     $ipnData = [
-        'TransId' => $resultDecode['TransactionId'] ?? null,
+        'TransId' => $transactionId,
         'MerchantRef' => $RefOrder,
         'Amount' => $amount,
         'Status' => 'Pending3DS',
-        'ipnURL' => $decodedData['ipnURL'] ?? null
+        'ipnURL' => $decodedData['ipnURL'] ?? null,
+        'raw_response' => $result // Stockage de la réponse brute
     ];
     
+    error_log("Données IPN préparées: " . print_r($ipnData, true));
+    
     try {
-        // Log de la tentative 3DS
-        logIpnAttemptToDb(
-            $resultDecode['TransactionId'],
-            $ipnData,
-            101,
-            'Transaction en attente de 3DS'
-        );
+        // Mettre à jour le statut dans transactions
+        $stmt = $connection->prepare("
+            UPDATE transactions 
+            SET status = 'pending'
+            WHERE ref_order = ?
+        ");
+        $stmt->bind_param("s", $RefOrder);
+        $stmt->execute();
+        error_log("Statut transaction mis à jour: pending");
+        
+        // Logger dans ovri_logs
+        $logStmt = $connection->prepare("
+            INSERT INTO ovri_logs 
+            (transaction_id, request_body, status_code, response, created_at) 
+            VALUES (?, ?, ?, ?, NOW())
+        ");
+        
+        $requestBody = json_encode($ipnData);
+        $statusCode = 101; // Code spécial pour 3DS
+        $response = "Transaction en attente de 3DS - " . $result;
+        
+        $logStmt->bind_param("ssis", $transactionId, $requestBody, $statusCode, $response);
+        $logResult = $logStmt->execute();
+        error_log("Résultat log OVRI: " . ($logResult ? "Succès" : "Échec"));
         
         // Afficher la page 3DS
         if (isset($resultDecode['embeddedB64'])) {
+            error_log("Affichage page 3DS");
             $embeddedB64 = base64_decode($resultDecode['embeddedB64']);
             echo $embeddedB64;
             exit();
+        } else {
+            error_log("ERREUR: embeddedB64 manquant dans la réponse 3DS");
+            throw new Exception("Données 3DS manquantes");
         }
     } catch (Exception $e) {
-        error_log("Erreur lors du traitement 3DS: " . $e->getMessage());
+        error_log("ERREUR lors du traitement 3DS: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        
+        // Redirection vers l'URL d'échec
+        if (isset($decodedData['urlKO'])) {
+            header("Location: " . $decodedData['urlKO']);
+            exit();
+        }
     }
 }
 
