@@ -83,9 +83,9 @@ $myrequest = array(
     'edYear' => $expYear,
     'cvv' => $CVN,
     'customerIP' => $UserIP,
-    'urlIPN' => 'https://www.example.com/ipn',
-    'urlOK' => 'https://pay.payblis.com/api/success.php',
-    'urlKO' => 'https://pay.payblis.com/api/failed.php',
+    'urlIPN' => $ipnUrl,
+    'urlOK' => $successUrl,
+    'urlKO' => $failureUrl,
     'browserUserAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'browserLanguage' => 'en-US',
     'browserAcceptHeader' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -135,17 +135,12 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    // Décoder les données utilisateur pour obtenir ipnURL et MerchantKey
-    $decodedData = unserialize(urldecode($userdata));
-    
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
     $ipnData = [
         'TransId' => $resultDecode['TransactionId'],
         'MerchantRef' => $RefOrder,
         'Amount' => $amount,
-        'Status' => 'Success',
-        'ipnURL' => $decodedData['ipnURL'] ?? null,
-        'MerchantKey' => $decodedData['MerchantKey'] ?? null
+        'Status' => 'Success'
     ];
     
     try {
@@ -156,7 +151,7 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    header('Location: ' . $urlOK);
+    header('Location: ' . $successUrl);
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;
     updatelogs($MyVars, $resultDecode, $http_code);

@@ -1,4 +1,9 @@
 <?php
+require_once 'init.php';
+require_once 'TransactionManager.php';
+
+$transactionManager = new TransactionManager($db);
+
 // Fonction de logging dédiée
 function logDebug($message, $data = null) {
     $logMessage = "[IPN Debug] " . date('Y-m-d H:i:s') . " - " . $message;
@@ -208,8 +213,6 @@ if (strpos($decoded, 'array=') === 0) {
     $serialized = substr($parts[0], 6); // Enlever 'array=' du premier élément
     $serialized = urldecode($serialized); // Décoder une seconde fois
     
-    error_log("[Ovri IPN] Attempting to unserialize: " . $serialized);
-    
     try {
         $response = unserialize($serialized);
         if ($response === false) {
@@ -227,19 +230,23 @@ if (strpos($decoded, 'array=') === 0) {
             }
         }
         
-        error_log("[Ovri IPN] Successfully unserialized main data: " . print_r($response, true));
-        error_log("[Ovri IPN] Additional data: " . print_r($additionalData, true));
+        error_log("[Ovri IPN] Decoded data: " . print_r($response, true));
         
-        // Combiner les données
-        $fullData = array_merge($response, $additionalData);
-        
-        // Traiter la réponse
-        if (isset($fullData['RefOrder'])) {
-            // Stocker ou mettre à jour les informations de transaction
-            error_log("[Ovri IPN] Processing transaction for RefOrder: " . $fullData['RefOrder']);
+        if (isset($response['RefOrder'])) {
+            $refOrder = $response['RefOrder'];
+            $transaction = $transactionManager->getTransaction($refOrder);
             
-            // TODO: Ajouter votre logique de traitement ici
-            // Par exemple, mettre à jour le statut de la transaction dans votre base de données
+            if ($transaction) {
+                // Mise à jour du statut si présent
+                if (isset($additionalData['Status'])) {
+                    $transactionManager->updateTransactionStatus($refOrder, $additionalData['Status']);
+                    error_log("[Ovri IPN] Status updated for RefOrder: {$refOrder}");
+                }
+            } else {
+                // Nouvelle transaction
+                $transactionManager->createTransaction($response);
+                error_log("[Ovri IPN] New transaction created for RefOrder: {$refOrder}");
+            }
             
             http_response_code(200);
             echo "OK";
