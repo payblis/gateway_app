@@ -195,6 +195,7 @@ if ($resultDecode['code'] == 'success') {
     header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'failed') {
     $http_code = 500;
+    // D'abord enregistrer dans ovri_logs
     updatelogs($MyVars, $resultDecode, $http_code);
 
     $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
@@ -202,15 +203,18 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
+    // Ensuite envoyer l'IPN avec le TransactionId du resultDecode
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Failed");
     $ipnData = [
-        'TransId' => $resultDecode['TransactionId'] ?? null,
+        'TransId' => $resultDecode['TransactionId'] ?? $resultDecode['transactionId'] ?? uniqid('FAILED-'),
         'MerchantRef' => $RefOrder,
         'Amount' => $amount,
         'Status' => 'Failed'
     ];
     
     try {
+        // Attendre un court instant pour s'assurer que les données sont bien enregistrées
+        usleep(100000); // 100ms pause
         $ipnResult = sendIpnNotification($ipnData);
         error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
     } catch (Exception $e) {

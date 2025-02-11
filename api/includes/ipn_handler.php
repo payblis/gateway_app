@@ -72,27 +72,48 @@ function sendIpnNotification($transactionData) {
     error_log("[IPN] Données reçues: " . print_r($transactionData, true));
     
     try {
-        // Récupérer les données de la transaction
-        $query = "SELECT request_body, response_body FROM ovri_logs WHERE transaction_id = ?";
-        $stmt = $connection->prepare($query);
+        // Récupérer les données de la transaction avec une attente maximale
+        $maxAttempts = 3;
+        $attempt = 0;
+        $logData = null;
         
-        if (!$stmt) {
-            error_log("[IPN] Erreur préparation requête ovri_logs: " . $connection->error);
-            return false;
+        while ($attempt < $maxAttempts) {
+            $query = "SELECT request_body, response_body FROM ovri_logs WHERE transaction_id = ?";
+            $stmt = $connection->prepare($query);
+            
+            if (!$stmt) {
+                error_log("[IPN] Erreur préparation requête ovri_logs: " . $connection->error);
+                return false;
+            }
+            
+            $stmt->bind_param("s", $transactionData['TransId']);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result && $result->num_rows > 0) {
+                $logData = $result->fetch_assoc();
+                break;
+            }
+            
+            $attempt++;
+            if ($attempt < $maxAttempts) {
+                error_log("[IPN] Tentative {$attempt} - Données non trouvées, nouvelle tentative dans 100ms");
+                usleep(100000); // 100ms pause
+            }
         }
         
-        $stmt->bind_param("s", $transactionData['TransId']);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if (!$result || $result->num_rows === 0) {
-            error_log("[IPN] Aucune donnée trouvée dans ovri_logs");
-            return false;
+        if (!$logData) {
+            error_log("[IPN] Données non trouvées après {$maxAttempts} tentatives");
+            // Continuer avec des données minimales
+            $requestData = [
+                'ipnURL' => $transactionData['ipnURL'] ?? null,
+                'MerchantKey' => $transactionData['MerchantKey'] ?? null
+            ];
+            $responseData = [];
+        } else {
+            $requestData = json_decode($logData['request_body'], true);
+            $responseData = json_decode($logData['response_body'], true);
         }
-        
-        $logData = $result->fetch_assoc();
-        $requestData = json_decode($logData['request_body'], true);
-        $responseData = json_decode($logData['response_body'], true);
         
         error_log("[IPN] Données de requête: " . print_r($requestData, true));
         
