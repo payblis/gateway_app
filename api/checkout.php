@@ -131,27 +131,43 @@ if ($resultDecode['code'] == 'success') {
     $stmt->execute();
     
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
-    $ipnData = [
-        'TransId' => $resultDecode['TransactionId'],
-        'MerchantRef' => $RefOrder,
-        'Amount' => $amount,
-        'Status' => '2', // Pour correspondre au format OVRI
-        'ipnURL' => $decodedData['ipnURL'] ?? null,
-        'MerchantKey' => $decodedData['MerchantKey'] ?? null
-    ];
     
-    try {
-        usleep(100000); // 100ms pause
-        $ipnResult = sendIpnNotification($ipnData);
-        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-    } catch (Exception $e) {
-        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+    // Récupérer l'URL IPN depuis les données décodées
+    $ipnURL = $decodedData['ipnURL'] ?? null;
+    
+    if ($ipnURL) {
+        $ipnData = [
+            'TransId' => $resultDecode['TransactionId'],
+            'MerchantRef' => $RefOrder,
+            'status' => 'APPROVED',
+            'ipnURL' => $ipnURL
+        ];
+        
+        try {
+            usleep(100000); // 100ms pause
+            $ipnResult = sendIpnNotification($ipnData);
+            error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+            
+            // Log IPN attempt
+            logIpnAttempt(
+                $resultDecode['TransactionId'],
+                $ipnData,
+                $ipnResult ? 200 : 500,
+                $ipnResult ? 'IPN sent successfully' : 'Failed to send IPN'
+            );
+            
+        } catch (Exception $e) {
+            error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+            logIpnAttempt($resultDecode['TransactionId'], $ipnData, 500, $e->getMessage());
+        }
     }
 
-    // Redirection vers l'URL du marchand directement
-    if (isset($decodedData['urlOK'])) {
+    // Redirection vers l'URL de succès du marchand
+    if (!empty($decodedData['urlOK'])) {
         header('Location: ' . $decodedData['urlOK']);
-        exit;
+        exit();
+    } else {
+        error_log("URL de succès non trouvée dans les données décodées");
     }
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;
