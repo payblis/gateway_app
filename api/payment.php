@@ -43,8 +43,7 @@ $requiredFields = [
     'userIP',
     'lang',
     'urlOK',
-    'urlKO',
-    'urlIPN'
+    'urlKO'
 ];
 
 $missingFields = [];

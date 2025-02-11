@@ -71,9 +71,9 @@ $myrequest = array(
     'edYear' => $expYear,
     'cvv' => $CVN,
     'customerIP' => $UserIP,
-    'urlIPN' => $MyVars['urlIPN'] ?? 'https://www.example.com/ipn',
-    'urlOK' => $urlOK,
-    'urlKO' => $urlKO,
+    'urlIPN' => 'https://www.example.com/ipn',
+    'urlOK' => 'https://payblis.evolvsolution.com/api/success.php',
+    'urlKO' => 'https://payblis.evolvsolution.com/api/failed.php',
     'browserUserAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'browserLanguage' => 'en-US',
     'browserAcceptHeader' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -126,11 +126,7 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    // Envoyer la notification IPN avant la redirection
-    sendIpnNotification($resultDecode, $MyVars);
-
-    // Redirection simple vers urlOK sans paramètres
-    header('Location: ' . $urlOK);
+    header('Location:' . $urlOK . '?code=' . $resultDecode['code'] . '&transactionId=' . $resultDecode['TransactionId'] . '&status=' . $resultDecode['status']);
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -140,8 +136,7 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    // Redirection simple vers urlKO sans paramètres
-    header('Location: ' . $urlKO);
+    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
 } elseif ($resultDecode['code'] == 'FATAL-500') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -151,9 +146,10 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    // Redirection simple vers urlKO sans paramètres
-    header('Location: ' . $urlKO);
-} elseif ($resultDecode['code'] == 'failed') {
+    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
+}
+
+elseif ($resultDecode['code'] == 'failed') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
 
@@ -162,8 +158,7 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    // Redirection simple vers urlKO sans paramètres
-    header('Location: ' . $urlKO);
+    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&truedecline=' . $resultDecode['truedecline'].'&errors=Invalid card number');
 }
 
 elseif ($resultDecode['code'] == 'pending3ds') {
