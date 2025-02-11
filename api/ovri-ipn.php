@@ -33,12 +33,20 @@ $ovri_response = json_decode($raw_post_data, true);
 error_log("Réponse OVRI décodée: " . print_r($ovri_response, true));
 
 if ($ovri_response) {
-    // Récupérer l'URL IPN du marchand depuis la base de données
+    // Récupérer la référence de commande depuis la réponse OVRI
     $merchantRef = $ovri_response['MerchantRef'] ?? null;
     error_log("MerchantRef extrait: " . ($merchantRef ?? 'null'));
     
     if ($merchantRef) {
-        $stmt = $connection->prepare("SELECT data, status FROM transactions WHERE ref_order = ?");
+        // Récupérer la transaction et les logs OVRI associés
+        $stmt = $connection->prepare("
+            SELECT t.*, o.request_body 
+            FROM transactions t
+            LEFT JOIN ovri_logs o ON t.ref_order = JSON_UNQUOTE(JSON_EXTRACT(o.request_body, '$.RefOrder'))
+            WHERE t.ref_order = ?
+            ORDER BY o.created_at DESC
+            LIMIT 1
+        ");
         $stmt->bind_param("s", $merchantRef);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -47,17 +55,16 @@ if ($ovri_response) {
         error_log("Transaction trouvée: " . print_r($transaction ?? 'null', true));
         
         if ($transaction) {
-            $userData = unserialize(urldecode($transaction['data']));
-            $merchantIpnUrl = $userData['ipnURL'] ?? null;
+            // Extraire l'URL IPN du request_body
+            $requestBody = json_decode($transaction['request_body'], true);
+            $merchantIpnUrl = $requestBody['ipnURL'] ?? null;
             
             error_log("URL IPN du marchand: " . ($merchantIpnUrl ?? 'null'));
-            error_log("Données utilisateur désérialisées: " . print_r($userData, true));
             
             // Mettre à jour le statut de la transaction si nécessaire
             if ($ovri_response['Status'] === '2') {
-                $updateStmt = $connection->prepare("UPDATE transactions SET status = 'paid', transaction_id = ? WHERE ref_order = ?");
-                $transId = $ovri_response['TransId'];
-                $updateStmt->bind_param("ss", $transId, $merchantRef);
+                $updateStmt = $connection->prepare("UPDATE transactions SET status = 'paid' WHERE ref_order = ?");
+                $updateStmt->bind_param("s", $merchantRef);
                 $updateResult = $updateStmt->execute();
                 error_log("Mise à jour du statut transaction: " . ($updateResult ? "Succès" : "Échec"));
             }
@@ -75,7 +82,7 @@ if ($ovri_response) {
                 
                 // Envoyer à l'URL IPN du marchand
                 try {
-                    $ipnResult = sendIpnNotification($ipnData);
+                    $ipnResult = sendIpnNotification($ipnData, $merchantIpnUrl);
                     error_log("Résultat envoi IPN au marchand: " . ($ipnResult ? "Succès" : "Échec"));
                 } catch (Exception $e) {
                     error_log("Erreur lors de l'envoi IPN au marchand: " . $e->getMessage());
