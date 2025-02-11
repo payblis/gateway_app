@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../../admin/include/config.php';  // Chemin relatif vers le fichier config existant
+require_once '/var/www/vhosts/payblis.com/pay.payblis.com/admin/include/config.php';  // Chemin absolu complet
 require_once 'includes/ipn_handler.php';  // Pour utiliser sendIpnNotification si nécessaire
 
 // Fonction de logging dédiée pour les callbacks
