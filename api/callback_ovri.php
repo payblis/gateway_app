@@ -1,5 +1,5 @@
 <?php
-require_once 'includes/config.php';  // Pour la connexion BD
+require_once __DIR__ . '/../../admin/include/config.php';  // Chemin relatif vers le fichier config existant
 require_once 'includes/ipn_handler.php';  // Pour utiliser sendIpnNotification si nécessaire
 
 // Fonction de logging dédiée pour les callbacks
