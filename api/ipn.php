@@ -80,10 +80,29 @@ if ($ovri_response) {
     
     if ($isIpnNotification) {
         $merchantRef = $ovri_response['MerchantRef'] ?? null;
+        $transId = $ovri_response['TransId'] ?? null;
         error_log("MerchantRef extrait: " . ($merchantRef ?? 'null'));
         
         if ($merchantRef) {
-            // Récupérer la transaction et les logs OVRI associés
+            // Enregistrer la réponse OVRI dans ovri_logs
+            $stmt = $connection->prepare("
+                INSERT INTO ovri_logs (transaction_id, response_body, status)
+                VALUES (?, ?, ?)
+            ");
+            $stmt->bind_param("sss", $transId, $raw_post_data, $ovri_response['Status']);
+            $stmt->execute();
+
+            // Mettre à jour le statut de la transaction
+            $stmt = $connection->prepare("
+                UPDATE transactions 
+                SET status = ?, 
+                    updated_at = NOW() 
+                WHERE ref_order = ?
+            ");
+            $stmt->bind_param("ss", $ovri_response['Status'], $merchantRef);
+            $stmt->execute();
+
+            // Récupérer l'URL IPN du marchand
             $stmt = $connection->prepare("
                 SELECT t.*, o.request_body 
                 FROM transactions t
@@ -98,17 +117,19 @@ if ($ovri_response) {
             $transaction = $result->fetch_assoc();
             
             if ($transaction) {
-                // Extraire l'URL IPN du request_body
                 $requestBody = json_decode($transaction['request_body'], true);
                 $merchantIpnUrl = $requestBody['ipnURL'] ?? null;
                 
-                if ($merchantIpnUrl) {
-                    // Envoyer l'IPN au marchand
+                if ($merchantIpnUrl && !hasSuccessfulIpnBeenSent($transId, $merchantRef)) {
+                    // Préparer et envoyer l'IPN au marchand
                     $ipnData = [
-                        'TransId' => $ovri_response['TransId'],
+                        'TransId' => $transId,
                         'MerchantRef' => $merchantRef,
                         'Status' => $ovri_response['Status'],
-                        'ipnURL' => $merchantIpnUrl
+                        'Amount' => $ovri_response['Amount'] ?? null,
+                        'Currency' => $ovri_response['Currency'] ?? null,
+                        'PaymentMethod' => $ovri_response['PaymentMethod'] ?? null,
+                        'TransactionDate' => $ovri_response['TransactionDate'] ?? date('Y-m-d H:i:s')
                     ];
                     
                     sendIpnNotification($ipnData);
