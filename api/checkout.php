@@ -149,26 +149,42 @@ if ($resultDecode['code'] == 'success') {
             $ipnResult = sendIpnNotification($ipnData);
             error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
             
-            logIpnAttempt(
+            // Préparer la réponse pour le log
+            $responseData = [
+                'success' => $ipnResult,
+                'timestamp' => date('Y-m-d H:i:s')
+            ];
+            
+            logIpnAttemptToDb(
                 $resultDecode['TransactionId'],
                 $ipnData,
                 $ipnResult ? 200 : 500,
-                $ipnResult ? 'IPN sent successfully' : 'Failed to send IPN'
+                json_encode($responseData)
             );
+            
+            // Redirection vers l'URL du marchand
+            if (isset($decodedData['urlOK'])) {
+                error_log("Redirection vers: " . $decodedData['urlOK']);
+                header("Location: " . $decodedData['urlOK']);
+                exit();
+            }
             
         } catch (Exception $e) {
             error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-            logIpnAttempt($resultDecode['TransactionId'], $ipnData, 500, $e->getMessage());
+            logIpnAttemptToDb(
+                $resultDecode['TransactionId'], 
+                $ipnData, 
+                500, 
+                $e->getMessage()
+            );
+            
+            // Redirection vers l'URL d'échec en cas d'erreur
+            if (isset($decodedData['urlKO'])) {
+                error_log("Redirection vers: " . $decodedData['urlKO']);
+                header("Location: " . $decodedData['urlKO']);
+                exit();
+            }
         }
-    }
-
-    // Redirection vers l'URL du marchand
-    if (isset($decodedData['urlOK'])) {
-        error_log("Redirection vers: " . $decodedData['urlOK']);
-        header("Location: " . $decodedData['urlOK']);
-        exit();
-    } else {
-        error_log("URL de succès non trouvée dans les données décodées");
     }
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;

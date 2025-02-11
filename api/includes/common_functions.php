@@ -79,4 +79,41 @@ function sendIpnNotification($transactionData) {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
         return false;
     }
+}
+
+function logIpnAttemptToDb($transactionId, $payload, $responseCode, $response) {
+    global $connection;
+    
+    $stmt = $connection->prepare("
+        INSERT INTO ipn_logs 
+        (transaction_id, payload, response_code, response, status, created_at) 
+        VALUES (?, ?, ?, ?, 'pending', NOW())
+    ");
+    
+    $payloadJson = json_encode($payload);
+    $status = ($responseCode >= 200 && $responseCode < 300) ? 'success' : 'failed';
+    
+    $stmt->bind_param("ssis", $transactionId, $payloadJson, $responseCode, $response);
+    
+    try {
+        $stmt->execute();
+        
+        // Mise à jour du statut basé sur le code de réponse
+        if ($stmt->affected_rows > 0) {
+            $insertId = $stmt->insert_id;
+            $updateStmt = $connection->prepare("
+                UPDATE ipn_logs 
+                SET status = ? 
+                WHERE id = ?
+            ");
+            $updateStmt->bind_param("si", $status, $insertId);
+            $updateStmt->execute();
+        }
+        
+        error_log("IPN logged successfully for transaction: " . $transactionId);
+        return true;
+    } catch (Exception $e) {
+        error_log("Error logging IPN: " . $e->getMessage());
+        return false;
+    }
 } 
