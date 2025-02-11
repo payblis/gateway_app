@@ -1,5 +1,5 @@
 <?php
-
+error_log("=== DÉBUT PAYMENT.PHP ===");
 require("../admin/include/config.php");
 
 if (!isset($_GET['token'])) {
@@ -43,7 +43,8 @@ $requiredFields = [
     'userIP',
     'lang',
     'urlOK',
-    'urlKO'
+    'urlKO',
+    'ipnURL'
 ];
 
 $missingFields = [];
@@ -62,8 +63,7 @@ if (!empty($missingFields)) {
     ]));
 }
 
-
-
+error_log("Tous les champs requis sont présents");
 
 function apiCheck($userApi)
 {
@@ -89,8 +89,7 @@ if (!$apiCheck) {
     exit();
 }
 
-
-
+error_log("Clé API validée");
 
 function insertTrans($reqbody)
 {
@@ -114,7 +113,6 @@ function insertTrans($reqbody)
     $ref_order = $reqbody['RefOrder'];
     $status = 'pending';
 
-
     $stmt->bind_param("ssssdsss", $name, $email, $ref_order, $first_name, $amount, $country, $status, $token);
 
     if ($stmt->execute()) {
@@ -129,6 +127,24 @@ function insertTrans($reqbody)
 
 $inserted_id = insertTrans($MyVars);
 $encodedData = urlencode(serialize($MyVars));
+
+// Enregistrement dans ovri_logs
+try {
+    $requestType = "via card";
+    $requestBody = json_encode($MyVars);
+    
+    $query = "INSERT INTO ovri_logs (request_type, request_body, response_body, http_code, token) 
+              VALUES (?, ?, '{}', 0, ?)";
+    $stmt = $connection->prepare($query);
+    $stmt->bind_param("sss", $requestType, $requestBody, $MyVars['MerchantKey']);
+    $stmt->execute();
+    
+    error_log("Transaction enregistrée dans ovri_logs");
+} catch (Exception $e) {
+    error_log("Erreur lors de l'enregistrement dans ovri_logs: " . $e->getMessage());
+}
+
+error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ===");
 ?>
 
 <!DOCTYPE html>

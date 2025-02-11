@@ -1,6 +1,10 @@
 <?php
-
+error_log("=== DÉBUT CHECKOUT.PHP ===");
 require('../admin/include/config.php');
+require('./includes/ipn_handler.php');
+
+error_log("POST data reçues: " . print_r($_POST, true));
+error_log("GET data reçues: " . print_r($_GET, true));
 
 function updatelogs($reqbody, $resbody, $http_code)
 {
@@ -72,8 +76,8 @@ $myrequest = array(
     'cvv' => $CVN,
     'customerIP' => $UserIP,
     'urlIPN' => 'https://www.example.com/ipn',
-    'urlOK' => 'https://payblis.evolvsolution.com/api/success.php',
-    'urlKO' => 'https://payblis.evolvsolution.com/api/failed.php',
+    'urlOK' => 'https://pay.payblis.com/api/success.php',
+    'urlKO' => 'https://pay.payblis.com/api/failed.php',
     'browserUserAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'browserLanguage' => 'en-US',
     'browserAcceptHeader' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -108,10 +112,7 @@ if (curl_errno($ch)) {
     echo 'Error:' . curl_error($ch);
 }
 
-
 curl_close($ch);
-
-
 
 // Decode the result
 $resultDecode = json_decode($result, true);
@@ -125,6 +126,24 @@ if ($resultDecode['code'] == 'success') {
     $status = "paid";
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
+
+    // Envoi de l'IPN si le paiement est réussi
+    if ($http_code === 200) {
+        error_log("Tentative d'envoi IPN depuis checkout.php");
+        $ipnData = [
+            'TransId' => $resultDecode['TransactionId'],
+            'MerchantRef' => $RefOrder,
+            'Amount' => $amount,
+            'Status' => 'Success'
+        ];
+        
+        try {
+            $ipnResult = sendIpnNotification($ipnData);
+            error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+        } catch (Exception $e) {
+            error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+        }
+    }
 
     header('Location:' . $urlOK . '?code=' . $resultDecode['code'] . '&transactionId=' . $resultDecode['TransactionId'] . '&status=' . $resultDecode['status']);
 } elseif ($resultDecode['code'] == '000006') {
@@ -166,8 +185,8 @@ elseif ($resultDecode['code'] == 'pending3ds') {
     updatelogs($MyVars, $resultDecode, $http_code);
     // echo $resultDecode['embeddedB64'];
 
-
     $embeddedB64 = base64_decode($resultDecode['embeddedB64']);
     echo $embeddedB64;
-
 }
+
+error_log("=== FIN CHECKOUT.PHP ===");

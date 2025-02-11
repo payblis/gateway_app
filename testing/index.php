@@ -3,7 +3,7 @@
 $MyVars = array(
     'MerchantKey' => 'lje7XqXlupzgROJRQDmkRyiyhBQXdulb', // Merchant Key
     'amount' => '76.00', // Amount to be paid
-    'RefOrder' => 'ref-6748', // Reference Order number (must be unique)
+    'RefOrder' => 'ref-45678456789', // Reference Order number (must be unique)
     'Customer_Email' => 'jonathan@test.com', // Customer's email
     'Customer_Phone' => '33123456789123', // Customer's phone number
     'Customer_Name' => 'Jonathan', // Customer's Name
@@ -11,8 +11,9 @@ $MyVars = array(
     'country' => 'France', // Customer's country
     'userIP' => '192.168.1.1', // Customer's IP
     'lang' => 'en', // Language
-    'urlOK' => 'http://localhost/testPayment/success.php',
-    'urlKO' => 'http://localhost/testPayment/failed.php'
+    'urlOK' => 'https://testmarchant.com/success.php',
+    'urlKO' => 'https://testmarchant.com/failed.php',
+    'ipnURL' => 'https://pay.payblis.com/testing/test-ipn.php'
 );
 
 // Serialize the data (convert array to string format)
