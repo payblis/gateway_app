@@ -1,6 +1,7 @@
 <?php
 
 require('../admin/include/config.php');
+require('./includes/ipn_handler.php');
 
 // Fonction pour envoyer la notification IPN
 function sendIpnNotification($transactionData) {
