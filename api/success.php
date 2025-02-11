@@ -2,11 +2,21 @@
 
 require('../admin/include/config.php');
 
+$log_file = __DIR__ . '/../logs/ipn_callbacks.log';
+error_log(date('[Y-m-d H:i:s]') . " Script started. Log file path: " . $log_file . "\n", 3, $log_file);
+
 function sendIpnNotification($transaction_data, $ovri_response) {
     global $connection;
     
     // Log file path
     $log_file = __DIR__ . '/../logs/ipn_callbacks.log';
+    
+    // Test logging
+    error_log(date('[Y-m-d H:i:s]') . " Starting IPN notification process\n", 3, $log_file);
+    
+    // Dump transaction data for debugging
+    error_log("Transaction Data: " . print_r($transaction_data, true) . "\n", 3, $log_file);
+    error_log("OVRI Response: " . print_r($ovri_response, true) . "\n", 3, $log_file);
     
     // Récupérer l'URL IPN depuis les logs
     $query = "SELECT request_body FROM ovri_logs 
@@ -144,3 +154,27 @@ if (mysqli_num_rows($exec) > 0) {
 
 // Close connection
 mysqli_close($connection);
+
+if ($result->num_rows > 0) {
+    $transaction_data = $result->fetch_assoc();
+    $ovri_response = json_decode($transaction_data['ovri_response'], true);
+    
+    // Debug log
+    error_log(date('[Y-m-d H:i:s]') . " Transaction found, preparing to send IPN\n", 3, __DIR__ . '/../logs/ipn_callbacks.log');
+    
+    // Mise à jour du statut
+    $update = "UPDATE transactions SET status = 'paid' WHERE ref_order = ?";
+    $stmt = $connection->prepare($update);
+    $stmt->bind_param("s", $MerchantRef);
+    $stmt->execute();
+
+    // Envoi de la notification IPN
+    $ipn_result = sendIpnNotification($transaction_data, $ovri_response);
+    
+    // Log result
+    error_log(date('[Y-m-d H:i:s]') . " IPN send result: " . ($ipn_result ? "Success" : "Failed") . "\n", 3, __DIR__ . '/../logs/ipn_callbacks.log');
+
+    // Redirection client
+    header('Location: ' . $transaction_data['urlOK']);
+    exit();
+}
