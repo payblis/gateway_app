@@ -5,6 +5,9 @@ require('../admin/include/config.php');
 function sendIpnNotification($transaction_data, $ovri_response) {
     global $connection;
     
+    // Log file path
+    $log_file = __DIR__ . '/../logs/ipn_callbacks.log';
+    
     // Récupérer l'URL IPN depuis les logs
     $query = "SELECT request_body FROM ovri_logs 
               WHERE transaction_id = ? 
@@ -17,6 +20,7 @@ function sendIpnNotification($transaction_data, $ovri_response) {
     $initial_request = json_decode($result->fetch_assoc()['request_body'], true);
     
     if (!isset($initial_request['urlIPN'])) {
+        error_log(date('[Y-m-d H:i:s]') . " No IPN URL found for transaction " . $transaction_data['TransId'] . "\n", 3, $log_file);
         return false;
     }
 
@@ -31,8 +35,16 @@ function sendIpnNotification($transaction_data, $ovri_response) {
         'timestamp' => date('Y-m-d H:i:s')
     ];
 
+    // Log the notification data
+    error_log(date('[Y-m-d H:i:s]') . " Preparing IPN notification for transaction " . $transaction_data['TransId'] . "\n", 3, $log_file);
+    error_log("IPN URL: " . $initial_request['urlIPN'] . "\n", 3, $log_file);
+    error_log("Notification Data: " . json_encode($notificationData, JSON_PRETTY_PRINT) . "\n", 3, $log_file);
+
     // Générer la signature
     $signature = hash_hmac('sha256', json_encode($notificationData), 'YOUR_SECRET_KEY');
+
+    // Log the signature
+    error_log("Generated Signature: " . $signature . "\n", 3, $log_file);
 
     // Envoyer la notification
     $ch = curl_init($initial_request['urlIPN']);
@@ -48,7 +60,16 @@ function sendIpnNotification($transaction_data, $ovri_response) {
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
+
+    // Log the response
+    error_log("HTTP Response Code: " . $httpCode . "\n", 3, $log_file);
+    error_log("Response Body: " . $response . "\n", 3, $log_file);
+    if ($curlError) {
+        error_log("Curl Error: " . $curlError . "\n", 3, $log_file);
+    }
+    error_log("----------------------------------------\n", 3, $log_file);
 
     // Enregistrer la notification dans les logs
     $stmt = $connection->prepare("INSERT INTO ovri_logs (
@@ -75,40 +96,34 @@ function sendIpnNotification($transaction_data, $ovri_response) {
     return $httpCode >= 200 && $httpCode < 300;
 }
 
-// Récupération des paramètres
+// Get values from URL parameters
 $MerchantRef = $_GET['MerchantRef'];
+$amount = $_GET['Amount'];
 $TransId = $_GET['TransId'];
+$Status = $_GET['Status'];
 
-// Mise à jour du statut et envoi de l'IPN
-$query = "SELECT t.*, o.response_body as ovri_response 
-          FROM transactions t 
-          JOIN ovri_logs o ON t.ref_order = o.transaction_id 
-          WHERE t.ref_order = ? AND o.request_type = 'via card'";
 
-$stmt = $connection->prepare($query);
-$stmt->bind_param("s", $MerchantRef);
-$stmt->execute();
-$result = $stmt->get_result();
+$query = "SELECT * FROM transactions WHERE `ref_order` = '$MerchantRef'";
+$run = mysqli_query($connection, $query);
 
-if ($result->num_rows > 0) {
-    $transaction_data = $result->fetch_assoc();
-    $ovri_response = json_decode($transaction_data['ovri_response'], true);
-    
-    // Mise à jour du statut
-    $update = "UPDATE transactions SET status = 'paid' WHERE ref_order = ?";
-    $stmt = $connection->prepare($update);
-    $stmt->bind_param("s", $MerchantRef);
-    $stmt->execute();
+if (mysqli_num_rows($run) > 0) {
 
-    // Envoi de la notification IPN
-    sendIpnNotification($transaction_data, $ovri_response);
+    $row = mysqli_fetch_assoc($run);
+    // echo $row['ref_order'];
 
-    // Redirection client
-    header('Location: ' . $transaction_data['urlOK']);
-    exit();
+    $update = "UPDATE `transactions` SET `status`= 'paid' WHERE `ref_order` = '{$row['ref_order']}'";
+    $result = mysqli_query($connection, $update) or die("failed to update query.");
+
+    // echo '<pre>';
+    // print_r($_GET);
+    // echo '</pre>';
+} else {
+    echo "No records found for Transaction ID: " . htmlspecialchars($MerchantRef);
 }
 
-// Getting SuccessUrl
+
+
+//Getting SuccessUrl
 $getdata = "SELECT * FROM ovri_logs WHERE `transaction_id` = '$TransId'";
 $exec = mysqli_query($connection, $getdata);
 
@@ -124,6 +139,8 @@ if (mysqli_num_rows($exec) > 0) {
 } else {
     echo "<p>No records found for Transaction ID: " . htmlspecialchars($TransId) . "</p>";
 }
+
+
 
 // Close connection
 mysqli_close($connection);
