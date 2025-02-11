@@ -13,6 +13,15 @@ error_log("Headers reçus: " . print_r($headers, true));
 error_log("GET params: " . print_r($_GET, true));
 error_log("POST params: " . print_r($_POST, true));
 
+// Log the full URL
+error_log("Full URL: " . $_SERVER['REQUEST_URI']);
+
+// Log all server variables
+error_log("Server variables: " . print_r($_SERVER, true));
+
+// Log the raw request
+error_log("Raw request: " . file_get_contents('php://input'));
+
 // Si la réponse est en JSON, tentative de décodage
 if (isset($headers['Content-Type']) && strpos($headers['Content-Type'], 'application/json') !== false) {
     $json_data = json_decode($raw_post_data, true);
