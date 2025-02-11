@@ -1,7 +1,23 @@
 <?php
 error_log("=== DÉBUT SUCCESS.PHP ===");
+
+// Capturer le corps de la requête brute
+$raw_post_data = file_get_contents('php://input');
+error_log("Raw POST data: " . $raw_post_data);
+
+// Capturer les headers
+$headers = getallheaders();
+error_log("Headers reçus: " . print_r($headers, true));
+
+// Logging des paramètres GET et POST existants
 error_log("GET params: " . print_r($_GET, true));
 error_log("POST params: " . print_r($_POST, true));
+
+// Si la réponse est en JSON, tentative de décodage
+if (isset($headers['Content-Type']) && strpos($headers['Content-Type'], 'application/json') !== false) {
+    $json_data = json_decode($raw_post_data, true);
+    error_log("Decoded JSON data: " . print_r($json_data, true));
+}
 
 require('../admin/include/config.php');
 error_log("Config chargée");
