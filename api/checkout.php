@@ -2,6 +2,7 @@
 error_log("=== DÉBUT CHECKOUT.PHP ===");
 require('../admin/include/config.php');
 require('./includes/ipn_handler.php');
+require('./includes/ovri_logger.php');
 
 error_log("POST data reçues: " . print_r($_POST, true));
 error_log("GET data reçues: " . print_r($_GET, true));
@@ -147,6 +148,15 @@ if ($resultDecode['code'] == 'success') {
     } catch (Exception $e) {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
+
+    // Avant la redirection vers OVRI
+    logOvriFlow('pre_redirect_ovri', [
+        'url' => $urlOK ?? 'No URL',
+        'params' => [],
+        'headers' => getallheaders(),
+        'session' => $_SESSION ?? [],
+        'method' => $_SERVER['REQUEST_METHOD']
+    ]);
 
     header('Location: ' . $urlOK);
 } elseif ($resultDecode['code'] == '000006') {

@@ -1,6 +1,19 @@
 <?php
 error_log("=== DÉBUT SUCCESS.PHP ===");
 
+require('./includes/ovri_logger.php');
+
+// Log au début du fichier
+logOvriFlow('ovri_callback', [
+    'referer' => $_SERVER['HTTP_REFERER'] ?? 'No referer',
+    'get_params' => $_GET,
+    'post_params' => $_POST,
+    'raw_input' => file_get_contents('php://input'),
+    'headers' => getallheaders(),
+    'server' => $_SERVER,
+    'session' => $_SESSION ?? []
+]);
+
 // Capturer le corps de la requête brute
 $raw_post_data = file_get_contents('php://input');
 error_log("Raw POST data: " . $raw_post_data);
