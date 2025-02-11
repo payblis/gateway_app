@@ -203,8 +203,10 @@ error_log("[Ovri IPN] URL decoded input: " . $decoded);
 
 // Extraire le tableau depuis le paramètre 'array='
 if (strpos($decoded, 'array=') === 0) {
-    $serialized = substr($decoded, 6); // Enlever 'array='
-    $serialized = urldecode($serialized); // Décoder une seconde fois si nécessaire
+    // Séparer les différentes parties des données
+    $parts = explode('&', $decoded);
+    $serialized = substr($parts[0], 6); // Enlever 'array=' du premier élément
+    $serialized = urldecode($serialized); // Décoder une seconde fois
     
     error_log("[Ovri IPN] Attempting to unserialize: " . $serialized);
     
@@ -216,13 +218,35 @@ if (strpos($decoded, 'array=') === 0) {
             exit;
         }
         
-        error_log("[Ovri IPN] Successfully unserialized data: " . print_r($response, true));
+        // Récupérer les données additionnelles
+        $additionalData = [];
+        for ($i = 1; $i < count($parts); $i++) {
+            $pair = explode('=', $parts[$i]);
+            if (count($pair) == 2) {
+                $additionalData[$pair[0]] = urldecode($pair[1]);
+            }
+        }
+        
+        error_log("[Ovri IPN] Successfully unserialized main data: " . print_r($response, true));
+        error_log("[Ovri IPN] Additional data: " . print_r($additionalData, true));
+        
+        // Combiner les données
+        $fullData = array_merge($response, $additionalData);
         
         // Traiter la réponse
-        // TODO: Ajouter votre logique de traitement ici
-        
-        http_response_code(200);
-        echo "OK";
+        if (isset($fullData['RefOrder'])) {
+            // Stocker ou mettre à jour les informations de transaction
+            error_log("[Ovri IPN] Processing transaction for RefOrder: " . $fullData['RefOrder']);
+            
+            // TODO: Ajouter votre logique de traitement ici
+            // Par exemple, mettre à jour le statut de la transaction dans votre base de données
+            
+            http_response_code(200);
+            echo "OK";
+        } else {
+            error_log("[Ovri IPN] Missing RefOrder in response");
+            http_response_code(400);
+        }
         
     } catch (Exception $e) {
         error_log("[Ovri IPN] Error processing payment: " . $e->getMessage());
