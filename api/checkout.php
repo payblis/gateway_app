@@ -1,7 +1,7 @@
 <?php
 error_log("=== DÉBUT CHECKOUT.PHP ===");
 require('../admin/include/config.php');
-require('./includes/common_functions.php');
+require('./includes/ipn_handler.php');
 
 error_log("POST data reçues: " . print_r($_POST, true));
 error_log("GET data reçues: " . print_r($_GET, true));
@@ -75,7 +75,7 @@ $myrequest = array(
     'edYear' => $expYear,
     'cvv' => $CVN,
     'customerIP' => $UserIP,
-    'urlIPN' => 'https://pay.payblis.com/api/ipn.php',
+    'urlIPN' => 'https://www.example.com/ipn',
     'urlOK' => 'https://pay.payblis.com/api/success.php',
     'urlKO' => 'https://pay.payblis.com/api/failed.php',
     'browserUserAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -87,9 +87,6 @@ $myrequest = array(
     'browserScreenWidth' => '1920',
     'browserTimeZone' => -5,
 );
-
-// Log de la requête
-error_log("Requête envoyée à OVRI: " . print_r($myrequest, true));
 
 function GenerateSignature(array $jsondata)
 {
@@ -129,63 +126,29 @@ if ($resultDecode['code'] == 'success') {
     $status = "paid";
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
+
+    // Décoder les données utilisateur pour obtenir ipnURL et MerchantKey
+    $decodedData = unserialize(urldecode($userdata));
     
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
+    $ipnData = [
+        'TransId' => $resultDecode['TransactionId'],
+        'MerchantRef' => $RefOrder,
+        'Amount' => $amount,
+        'Status' => 'Success',
+        'ipnURL' => $decodedData['ipnURL'] ?? null,
+        'MerchantKey' => $decodedData['MerchantKey'] ?? null
+    ];
     
-    // Décodage correct des données
-    $decodedData = unserialize(urldecode($userdata));
-    error_log("Données décodées: " . print_r($decodedData, true));
-    
-    if (isset($decodedData['ipnURL'])) {
-        $ipnData = [
-            'TransId' => $resultDecode['TransactionId'],
-            'MerchantRef' => $RefOrder,
-            'status' => 'APPROVED',
-            'ipnURL' => $decodedData['ipnURL']
-        ];
-        
-        try {
-            usleep(100000); // 100ms pause
-            $ipnResult = sendIpnNotification($ipnData);
-            error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-            
-            // Préparer la réponse pour le log
-            $responseData = [
-                'success' => $ipnResult,
-                'timestamp' => date('Y-m-d H:i:s')
-            ];
-            
-            logIpnAttemptToDb(
-                $resultDecode['TransactionId'],
-                $ipnData,
-                $ipnResult ? 200 : 500,
-                json_encode($responseData)
-            );
-            
-            // Redirection vers l'URL du marchand
-            if (isset($decodedData['urlOK'])) {
-                error_log("Redirection vers: " . $decodedData['urlOK']);
-                header("Location: " . $decodedData['urlOK']);
-                exit();
-            }
-            
-        } catch (Exception $e) {
-            error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-            logIpnAttemptToDb(
-                $resultDecode['TransactionId'], 
-                $ipnData, 
-                500, 
-                $e->getMessage()
-            );
-            
-            // Redirection vers l'URL d'échec en cas d'erreur
-            if (isset($decodedData['urlKO'])) {
-                error_log("Redirection vers: " . $decodedData['urlKO']);
-                header("Location: " . $decodedData['urlKO']);
-                exit();
-            }
-        }
+    try {
+        usleep(100000); // 100ms pause
+        $ipnResult = sendIpnNotification($ipnData);
+        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
+
+    header('Location: ' . $urlOK);
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -210,12 +173,7 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    $decodedData = unserialize(urldecode($userdata));
-    if (isset($decodedData['urlKO'])) {
-        error_log("Redirection vers: " . $decodedData['urlKO']);
-        header("Location: " . $decodedData['urlKO']);
-        exit();
-    }
+    header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'FATAL-500') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -240,12 +198,7 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    $decodedData = unserialize(urldecode($userdata));
-    if (isset($decodedData['urlKO'])) {
-        error_log("Redirection vers: " . $decodedData['urlKO']);
-        header("Location: " . $decodedData['urlKO']);
-        exit();
-    }
+    header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'failed') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -276,102 +229,28 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    $decodedData = unserialize(urldecode($userdata));
-    if (isset($decodedData['urlKO'])) {
-        error_log("Redirection vers: " . $decodedData['urlKO']);
-        header("Location: " . $decodedData['urlKO']);
-        exit();
-    }
+    header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'pending3ds') {
     $http_code = 101;
     updatelogs($MyVars, $resultDecode, $http_code);
 
-    error_log("=== TRAITEMENT 3DS ===");
-    error_log("Données complètes 3DS: " . print_r($resultDecode, true));
-    
-    // Décodage des données
-    $decodedData = unserialize(urldecode($userdata));
-    error_log("Données merchant décodées: " . print_r($decodedData, true));
-    
-    // Récupérer le TransactionId depuis la réponse OVRI
-    $transactionId = $resultDecode['transactionId'] ?? 
-                    $resultDecode['TransactionId'] ?? 
-                    $resultDecode['transaction_id'] ?? 
-                    null;
-    
-    error_log("TransactionId extrait: " . ($transactionId ?? 'NON TROUVÉ'));
+    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Pending3DS");
+    $ipnData = [
+        'TransId' => $resultDecode['TransactionId'] ?? null,
+        'MerchantRef' => $RefOrder,
+        'Amount' => $amount,
+        'Status' => 'Pending3DS'
+    ];
     
     try {
-        // 1. Mettre à jour le statut dans transactions
-        $stmt = $connection->prepare("
-            UPDATE transactions 
-            SET status = 'pending'
-            WHERE ref_order = ?
-        ");
-        $stmt->bind_param("s", $RefOrder);
-        $updateResult = $stmt->execute();
-        error_log("Mise à jour transaction status: " . ($updateResult ? "Succès" : "Échec"));
-
-        // 2. Logger dans ovri_logs
-        $logStmt = $connection->prepare("
-            INSERT INTO ovri_logs 
-            (transaction_id, request_type, request_body, response_body, http_code, token, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, NOW())
-        ");
-        
-        $requestType = '3DS_AUTH';
-        $requestBody = json_encode([
-            'TransId' => $transactionId,
-            'MerchantRef' => $RefOrder,
-            'Amount' => $amount,
-            'Status' => 'Pending3DS',
-            'original_request' => $myrequest
-        ]);
-        
-        $responseBody = $result; // Réponse brute d'OVRI
-        $httpCode = 101; // Code spécial pour 3DS
-        $tokenValue = $decodedData['MerchantKey'] ?? '';
-        
-        $logStmt->bind_param("ssssss", 
-            $transactionId, 
-            $requestType,
-            $requestBody, 
-            $responseBody,
-            $httpCode,
-            $tokenValue
-        );
-        
-        $logResult = $logStmt->execute();
-        error_log("Log OVRI résultat: " . ($logResult ? "Succès" : "Échec"));
-        
-        // 3. Afficher la page 3DS
-        if (isset($resultDecode['embeddedB64'])) {
-            error_log("Affichage page 3DS - Longueur contenu: " . strlen($resultDecode['embeddedB64']));
-            $embeddedB64 = base64_decode($resultDecode['embeddedB64']);
-            
-            // Log du début du HTML pour debug
-            error_log("Début du HTML 3DS: " . substr($embeddedB64, 0, 200));
-            
-            echo $embeddedB64;
-            exit();
-        } else {
-            error_log("ERREUR CRITIQUE: embeddedB64 manquant dans la réponse 3DS");
-            throw new Exception("Données 3DS manquantes");
-        }
-        
+        $ipnResult = sendIpnNotification($ipnData);
+        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
     } catch (Exception $e) {
-        error_log("ERREUR lors du traitement 3DS: " . $e->getMessage());
-        error_log("Stack trace: " . $e->getTraceAsString());
-        
-        // Redirection vers l'URL d'échec
-        if (isset($decodedData['urlKO'])) {
-            error_log("Redirection vers URL KO: " . $decodedData['urlKO']);
-            header("Location: " . $decodedData['urlKO']);
-            exit();
-        } else {
-            error_log("ERREUR: Pas d'URL KO disponible");
-        }
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
+
+    $embeddedB64 = base64_decode($resultDecode['embeddedB64']);
+    echo $embeddedB64;
 }
 
 error_log("=== FIN CHECKOUT.PHP ===");

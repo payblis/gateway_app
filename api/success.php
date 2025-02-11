@@ -1,122 +1,88 @@
 <?php
 error_log("=== DÉBUT SUCCESS.PHP ===");
-error_log("GET params reçus: " . print_r($_GET, true));
-error_log("POST params reçus: " . print_r($_POST, true));
+error_log("GET params: " . print_r($_GET, true));
+error_log("POST params: " . print_r($_POST, true));
 
-require_once('../admin/include/config.php');
-require_once('./includes/common_functions.php');
+require('../admin/include/config.php');
+error_log("Config chargée");
 
-try {
-    // Récupérer les paramètres
-    $transId = $_GET['TransId'] ?? null;
-    $merchantRef = $_GET['MerchantRef'] ?? null;
-    $status = $_GET['Status'] ?? null;
-    $amount = $_GET['Amount'] ?? null;
+require('./includes/ipn_handler.php');
+error_log("Handler IPN chargé");
 
-    error_log("Paramètres extraits:");
-    error_log("TransId: " . ($transId ?? 'NULL'));
-    error_log("MerchantRef: " . ($merchantRef ?? 'NULL'));
-    error_log("Status: " . ($status ?? 'NULL'));
-    error_log("Amount: " . ($amount ?? 'NULL'));
+// Vérifier tous les paramètres reçus
+error_log("GET: " . print_r($_GET, true));
+error_log("POST: " . print_r($_POST, true));
 
-    if (!$merchantRef || !$status || !$transId) {
-        error_log("ERREUR: Paramètres manquants");
-        throw new Exception("Paramètres manquants");
-    }
+// Récupérer les paramètres de l'URL
+$TransId = $_GET['transactionId'] ?? null; // Changé pour matcher le paramètre réel
+$Status = $_GET['status'] ?? null;         // Changé pour matcher le paramètre réel
 
-    // Stocker la réponse OVRI dans ovri_logs
-    $logStmt = $connection->prepare("
-        INSERT INTO ovri_logs (
-            transaction_id,
-            request_type,
-            request_body,
-            response_body,
-            http_code,
-            token
-        ) VALUES (?, ?, ?, ?, ?, ?)
-    ");
+error_log("TransId: " . $TransId);
+error_log("Status: " . $Status);
 
-    if ($logStmt) {
-        $requestType = '3DS_RESPONSE';
-        $requestBody = json_encode($_GET);
-        $responseBody = json_encode($_GET);  // On stocke la réponse OVRI complète
-        $httpCode = 200;
-        $token = $merchantRef;
-
-        $logStmt->bind_param("ssssss", 
-            $transId,
-            $requestType,
-            $requestBody,
-            $responseBody,
-            $httpCode,
-            $token
-        );
-        $logResult = $logStmt->execute();
-        error_log("Log de la réponse OVRI: " . ($logResult ? "Succès" : "Échec"));
-    }
-
-    // Mise à jour du statut de la transaction
-    $transactionStatus = ($status == '2') ? 'paid' : 'failed';
-    $updateStmt = $connection->prepare("
-        UPDATE transactions 
-        SET status = ? 
-        WHERE ref_order = ?
-    ");
+// Récupérer les informations de la transaction depuis ovri_logs
+if ($TransId) {
+    $query = "SELECT * FROM ovri_logs WHERE transaction_id = ?";
+    $stmt = $connection->prepare($query);
+    $stmt->bind_param("s", $TransId);
+    $stmt->execute();
+    $result = $stmt->get_result();
     
-    if (!$updateStmt) {
-        error_log("ERREUR MySQL (prepare update): " . $connection->error);
-        throw new Exception("Erreur de préparation de la requête update");
-    }
-    
-    $updateStmt->bind_param("ss", $transactionStatus, $merchantRef);
-    $updateResult = $updateStmt->execute();
-    
-    if (!$updateResult) {
-        error_log("ERREUR MySQL (execute update): " . $updateStmt->error);
-        throw new Exception("Erreur lors de la mise à jour du statut");
-    }
-    
-    error_log("Mise à jour transaction réussie. Affected rows: " . $updateStmt->affected_rows);
-
-    // Récupération des URLs depuis la première requête
-    $urlStmt = $connection->prepare("
-        SELECT request_body 
-        FROM ovri_logs 
-        WHERE transaction_id = ? 
-        AND request_type = 'via card'
-        ORDER BY created_at ASC 
-        LIMIT 1
-    ");
-    
-    $urlStmt->bind_param("s", $transId);
-    $urlStmt->execute();
-    $urlResult = $urlStmt->get_result();
-    $urlRow = $urlResult->fetch_assoc();
-
-    if ($urlRow) {
-        $requestData = json_decode($urlRow['request_body'], true);
-        $merchantData = json_decode(urldecode($requestData['array']), true);
+    if ($result->num_rows > 0) {
+        error_log("Transaction trouvée dans ovri_logs");
+        $logData = $result->fetch_assoc();
+        $requestData = json_decode($logData['request_body'], true);
         
-        $redirectUrl = ($transactionStatus == 'paid') ? 
-            ($merchantData['urlOK'] ?? null) : 
-            ($merchantData['urlKO'] ?? null);
+        // Récupérer MerchantRef et Amount depuis les données stockées
+        $MerchantRef = $requestData['RefOrder'] ?? null;
+        $amount = $requestData['amount'] ?? null;
         
-        error_log("URL de redirection: " . ($redirectUrl ?? 'NULL'));
-
-        if ($redirectUrl) {
-            header("Location: " . $redirectUrl);
-            exit();
+        error_log("MerchantRef: " . $MerchantRef);
+        error_log("Amount: " . $amount);
+        
+        if ($MerchantRef) {
+            // Mettre à jour le statut dans transactions
+            $updateQuery = "UPDATE transactions SET status = 'paid' WHERE ref_order = ?";
+            $updateStmt = $connection->prepare($updateQuery);
+            $updateStmt->bind_param("s", $MerchantRef);
+            $updateStmt->execute();
+            error_log("Statut mis à jour dans transactions");
+            
+            // Préparer les données pour l'IPN
+            $transactionData = [
+                'MerchantRef' => $MerchantRef,
+                'Amount' => $amount,
+                'TransId' => $TransId,
+                'Status' => $Status
+            ];
+            
+            error_log("Données IPN préparées: " . print_r($transactionData, true));
+            
+            // Appeler sendIpnNotification
+            try {
+                error_log("Tentative d'envoi IPN");
+                $ipnResult = sendIpnNotification($transactionData);
+                error_log("Résultat IPN: " . ($ipnResult ? "Succès" : "Échec"));
+            } catch (Exception $e) {
+                error_log("Erreur IPN: " . $e->getMessage());
+            }
+            
+            // Redirection
+            if (isset($requestData['urlOK'])) {
+                $redirectUrl = $requestData['urlOK'] . 
+                             '?MerchantRef=' . urlencode($MerchantRef) . 
+                             '&Amount=' . urlencode($amount) . 
+                             '&TransId=' . urlencode($TransId) . 
+                             '&Status=Success';
+                
+                error_log("Redirection vers: " . $redirectUrl);
+                header('Location: ' . $redirectUrl);
+                exit;
+            }
         }
+    } else {
+        error_log("Aucune transaction trouvée pour TransId: " . $TransId);
     }
-    
-    throw new Exception("URL de redirection non trouvée");
-    
-} catch (Exception $e) {
-    error_log("ERREUR CRITIQUE dans success.php: " . $e->getMessage());
-    error_log("Stack trace: " . $e->getTraceAsString());
-    
-    header("Location: /error.php");
-    exit();
 }
 
 error_log("=== FIN SUCCESS.PHP ===");
