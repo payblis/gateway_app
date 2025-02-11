@@ -79,12 +79,15 @@ $myrequest = array(
     'browserTimeZone' => -5,
 );
 
+// Configuration de l'URL de l'API Ovri
+$ovriApiEndpoint = 'https://api.ovri.app/v1/payments'; // Remplacez par l'URL correcte de l'API Ovri
+
 // Envoi de la requête à Ovri
-$ch = curl_init(apiEndPoint);
+$ch = curl_init($ovriApiEndpoint);
 curl_setopt($ch, CURLOPT_HTTPHEADER, array(
     'Content-Type: application/json',
-    'apikey: ' . myApiKeyPos,
-    'secretkey: ' . mySecretKeyPos
+    'apikey: ' . OVRI_API_KEY, // Utilisez la constante définie dans config.php
+    'secretkey: ' . OVRI_SECRET_KEY // Utilisez la constante définie dans config.php
 ));
 curl_setopt($ch, CURLOPT_POST, 1);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($myrequest));
