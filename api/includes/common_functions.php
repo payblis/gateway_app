@@ -4,25 +4,48 @@ function logOvriFlow($type, $data) {
     error_log("Flow type: " . $type . ", Data: " . print_r($data, true));
 }
 
-function logIpnAttempt($transactionId, $payload, $httpCode, $message) {
-    global $connection;
+class IpnLogger {
+    private static $instance = null;
+    private $connection;
     
-    $stmt = $connection->prepare("
-        INSERT INTO ipn_logs 
-        (transaction_id, payload, http_code, message, created_at) 
-        VALUES (?, ?, ?, ?, NOW())
-    ");
+    private function __construct($connection) {
+        $this->connection = $connection;
+    }
     
-    $payloadJson = json_encode($payload);
-    $stmt->bind_param("ssis", $transactionId, $payloadJson, $httpCode, $message);
+    public static function getInstance($connection) {
+        if (self::$instance === null) {
+            self::$instance = new self($connection);
+        }
+        return self::$instance;
+    }
     
-    try {
-        $stmt->execute();
-        error_log("IPN logged successfully for transaction: " . $transactionId);
-        return true;
-    } catch (Exception $e) {
-        error_log("Error logging IPN: " . $e->getMessage());
-        return false;
+    public function logAttempt($transactionId, $data, $statusCode, $message) {
+        try {
+            $stmt = $this->connection->prepare("
+                INSERT INTO ovri_logs 
+                (transaction_id, request_type, request_body, response_body, http_code, token, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
+            ");
+            
+            $requestType = 'IPN_NOTIFICATION';
+            $requestBody = json_encode($data);
+            $responseBody = $message;
+            $token = $data['MerchantKey'] ?? '';
+            
+            $stmt->bind_param("ssssss", 
+                $transactionId,
+                $requestType,
+                $requestBody,
+                $responseBody,
+                $statusCode,
+                $token
+            );
+            
+            return $stmt->execute();
+        } catch (Exception $e) {
+            error_log("Error in logAttempt: " . $e->getMessage());
+            return false;
+        }
     }
 }
 
