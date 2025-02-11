@@ -2,7 +2,6 @@
 error_log("=== DÉBUT IPN.PHP ===");
 
 require('../admin/include/config.php');
-require('./includes/ovri_logger.php');
 
 // Fonction de logging dédiée
 function logDebug($message, $data = null) {

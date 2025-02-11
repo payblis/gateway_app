@@ -1,6 +1,7 @@
 <?php
 error_log("=== DÉBUT CHECKOUT.PHP ===");
 require('../admin/include/config.php');
+require('./includes/common_functions.php');
 
 error_log("POST data reçues: " . print_r($_POST, true));
 error_log("GET data reçues: " . print_r($_GET, true));
