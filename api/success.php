@@ -29,27 +29,35 @@ if ($merchantRef && $transId) {
         $transaction = $result->fetch_assoc();
 
         if ($transaction) {
-            // 2. Mettre à jour uniquement si le statut est toujours pending3ds
-            if ($transaction['status'] === 'pending3ds') {
+            // 2. Vérifier si le statut est pending3ds et si le Status est 6 (succès 3DS)
+            if ($transaction['status'] === 'pending3ds' && $status === '6') {
                 $updateStmt = $connection->prepare("UPDATE transactions SET status = ?, transaction_id = ? WHERE ref_order = ?");
                 $newStatus = "paid";
                 $updateStmt->bind_param("sss", $newStatus, $transId, $merchantRef);
                 $updateStmt->execute();
 
+                error_log("Transaction mise à jour avec succès - Status: paid, TransId: " . $transId);
+
                 // 3. Récupérer les données utilisateur pour l'IPN
                 $userData = unserialize($transaction['user_data']);
                 
-                // 4. Préparer et envoyer l'IPN
+                // 4. Préparer et envoyer l'IPN avec les détails 3DS
                 $ipnData = [
                     'TransId' => $transId,
                     'MerchantRef' => $merchantRef,
                     'Amount' => $amount,
                     'Status' => 'Success',
                     'ipnURL' => $userData['ipnURL'] ?? null,
-                    'MerchantKey' => $userData['MerchantKey'] ?? null
+                    'MerchantKey' => $userData['MerchantKey'] ?? null,
+                    'threeds' => [
+                        'status' => 'success',
+                        'code' => $status,
+                        'authentication_status' => 'Y'
+                    ]
                 ];
 
                 error_log("Tentative d'envoi IPN depuis success.php après 3DS - Status: Success");
+                error_log("Données IPN: " . print_r($ipnData, true));
                 
                 try {
                     $ipnResult = sendIpnNotification($ipnData);
@@ -64,7 +72,11 @@ if ($merchantRef && $transId) {
                     exit;
                 }
             } else {
-                error_log("Transaction déjà traitée avec le statut: " . $transaction['status']);
+                error_log("Statut invalide - Current status: " . $transaction['status'] . ", 3DS Status: " . $status);
+                if (isset($userData['urlKO'])) {
+                    header('Location: ' . $userData['urlKO']);
+                    exit;
+                }
             }
         } else {
             error_log("Transaction non trouvée pour le MerchantRef: " . $merchantRef);
