@@ -89,6 +89,9 @@ $myrequest = array(
     'browserTimeZone' => -5,
 );
 
+// Log de la requête
+error_log("Requête envoyée à OVRI: " . print_r($myrequest, true));
+
 function GenerateSignature(array $jsondata)
 {
     $stringSign = base64_encode(hash('sha512', json_encode($jsondata) . mySecretKeyPos));
