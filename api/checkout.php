@@ -58,6 +58,14 @@ $UserIP = $MyVars['userIP'];
 $urlOK = $MyVars['urlOK'];
 $urlKO = $MyVars['urlKO'];
 
+// Construire les URLs absolues
+$ipnUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/api/includes/ipn_handler.php';
+$successUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/api/success.php';
+$failureUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/api/failed.php';
+
+// Log de la construction des URLs
+error_log("[Ovri Checkout] URLs configured - IPN: $ipnUrl, Success: $successUrl, Failure: $failureUrl");
+
 // API endpoint and credentials
 define('apiEndPoint', 'https://api.ovri.app/payment/authorization');
 define('myApiKeyPos', '695066a9312825a06API66a9312825a09');

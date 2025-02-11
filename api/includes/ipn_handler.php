@@ -191,4 +191,31 @@ function sendIpnNotification($transactionData) {
         error_log("[IPN] Exception: " . $e->getMessage());
         return false;
     }
+}
+
+// Récupérer le contenu brut du POST
+$input = file_get_contents('php://input');
+error_log("[Ovri IPN] Received raw input: " . $input);
+
+$response = json_decode($input, true);
+
+if ($response === null) {
+    error_log("[Ovri IPN] Error: Invalid JSON received");
+    http_response_code(400);
+    exit;
+}
+
+error_log("[Ovri IPN] Decoded response: " . print_r($response, true));
+
+// Traiter la réponse
+try {
+    // Votre logique de traitement existante
+    // ...
+    
+    error_log("[Ovri IPN] Payment processed successfully");
+    http_response_code(200);
+    echo "OK";
+} catch (Exception $e) {
+    error_log("[Ovri IPN] Error processing payment: " . $e->getMessage());
+    http_response_code(500);
 } 
