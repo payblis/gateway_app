@@ -38,7 +38,7 @@ if ($ovri_response) {
     error_log("MerchantRef extrait: " . ($merchantRef ?? 'null'));
     
     if ($merchantRef) {
-        $stmt = $connection->prepare("SELECT user_data, status FROM transactions WHERE ref_order = ?");
+        $stmt = $connection->prepare("SELECT data, status FROM transactions WHERE ref_order = ?");
         $stmt->bind_param("s", $merchantRef);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -47,10 +47,11 @@ if ($ovri_response) {
         error_log("Transaction trouvée: " . print_r($transaction ?? 'null', true));
         
         if ($transaction) {
-            $userData = unserialize(urldecode($transaction['user_data']));
+            $userData = unserialize(urldecode($transaction['data']));
             $merchantIpnUrl = $userData['ipnURL'] ?? null;
             
             error_log("URL IPN du marchand: " . ($merchantIpnUrl ?? 'null'));
+            error_log("Données utilisateur désérialisées: " . print_r($userData, true));
             
             // Mettre à jour le statut de la transaction si nécessaire
             if ($ovri_response['Status'] === '2') {
