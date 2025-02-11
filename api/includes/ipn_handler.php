@@ -197,25 +197,38 @@ function sendIpnNotification($transactionData) {
 $input = file_get_contents('php://input');
 error_log("[Ovri IPN] Received raw input: " . $input);
 
-$response = json_decode($input, true);
+// Décoder l'URL encoding
+$decoded = urldecode($input);
+error_log("[Ovri IPN] URL decoded input: " . $decoded);
 
-if ($response === null) {
-    error_log("[Ovri IPN] Error: Invalid JSON received");
-    http_response_code(400);
-    exit;
-}
-
-error_log("[Ovri IPN] Decoded response: " . print_r($response, true));
-
-// Traiter la réponse
-try {
-    // Votre logique de traitement existante
-    // ...
+// Extraire le tableau depuis le paramètre 'array='
+if (strpos($decoded, 'array=') === 0) {
+    $serialized = substr($decoded, 6); // Enlever 'array='
+    $serialized = urldecode($serialized); // Décoder une seconde fois si nécessaire
     
-    error_log("[Ovri IPN] Payment processed successfully");
-    http_response_code(200);
-    echo "OK";
-} catch (Exception $e) {
-    error_log("[Ovri IPN] Error processing payment: " . $e->getMessage());
-    http_response_code(500);
+    error_log("[Ovri IPN] Attempting to unserialize: " . $serialized);
+    
+    try {
+        $response = unserialize($serialized);
+        if ($response === false) {
+            error_log("[Ovri IPN] Unserialization failed");
+            http_response_code(400);
+            exit;
+        }
+        
+        error_log("[Ovri IPN] Successfully unserialized data: " . print_r($response, true));
+        
+        // Traiter la réponse
+        // TODO: Ajouter votre logique de traitement ici
+        
+        http_response_code(200);
+        echo "OK";
+        
+    } catch (Exception $e) {
+        error_log("[Ovri IPN] Error processing payment: " . $e->getMessage());
+        http_response_code(500);
+    }
+} else {
+    error_log("[Ovri IPN] Invalid input format - missing 'array=' prefix");
+    http_response_code(400);
 } 
