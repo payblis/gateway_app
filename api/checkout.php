@@ -127,25 +127,28 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    // Envoi de l'IPN si le paiement est réussi
-    if ($http_code === 200) {
-        error_log("Tentative d'envoi IPN depuis checkout.php");
-        $ipnData = [
-            'TransId' => $resultDecode['TransactionId'],
-            'MerchantRef' => $RefOrder,
-            'Amount' => $amount,
-            'Status' => 'Success'
-        ];
-        
-        try {
-            $ipnResult = sendIpnNotification($ipnData);
-            error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-        } catch (Exception $e) {
-            error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-        }
+    // Décoder les données utilisateur pour obtenir ipnURL et MerchantKey
+    $decodedData = unserialize(urldecode($userdata));
+    
+    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
+    $ipnData = [
+        'TransId' => $resultDecode['TransactionId'],
+        'MerchantRef' => $RefOrder,
+        'Amount' => $amount,
+        'Status' => 'Success',
+        'ipnURL' => $decodedData['ipnURL'] ?? null,
+        'MerchantKey' => $decodedData['MerchantKey'] ?? null
+    ];
+    
+    try {
+        usleep(100000); // 100ms pause
+        $ipnResult = sendIpnNotification($ipnData);
+        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    header('Location:' . $urlOK . '?code=' . $resultDecode['code'] . '&transactionId=' . $resultDecode['TransactionId'] . '&status=' . $resultDecode['status']);
+    header('Location: ' . $urlOK);
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -155,7 +158,22 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
+    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Declined");
+    $ipnData = [
+        'TransId' => $resultDecode['TransactionId'] ?? null,
+        'MerchantRef' => $RefOrder,
+        'Amount' => $amount,
+        'Status' => 'Declined'
+    ];
+    
+    try {
+        $ipnResult = sendIpnNotification($ipnData);
+        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+    }
+
+    header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'FATAL-500') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -165,10 +183,23 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
-}
+    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Error");
+    $ipnData = [
+        'TransId' => $resultDecode['TransactionId'] ?? null,
+        'MerchantRef' => $RefOrder,
+        'Amount' => $amount,
+        'Status' => 'Error'
+    ];
+    
+    try {
+        $ipnResult = sendIpnNotification($ipnData);
+        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+    }
 
-elseif ($resultDecode['code'] == 'failed') {
+    header('Location: ' . $urlKO);
+} elseif ($resultDecode['code'] == 'failed') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
 
@@ -177,13 +208,46 @@ elseif ($resultDecode['code'] == 'failed') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&truedecline=' . $resultDecode['truedecline'].'&errors=Invalid card number');
-}
+    // Décoder les données utilisateur pour obtenir ipnURL et MerchantKey
+    $decodedData = unserialize(urldecode($userdata));
+    
+    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Failed");
+    $ipnData = [
+        'TransId' => $resultDecode['TransactionId'] ?? $resultDecode['transactionId'] ?? uniqid('FAILED-'),
+        'MerchantRef' => $RefOrder,
+        'Amount' => $amount,
+        'Status' => 'Failed',
+        'ipnURL' => $decodedData['ipnURL'] ?? null,
+        'MerchantKey' => $decodedData['MerchantKey'] ?? null
+    ];
+    
+    try {
+        usleep(100000); // 100ms pause
+        $ipnResult = sendIpnNotification($ipnData);
+        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+    }
 
-elseif ($resultDecode['code'] == 'pending3ds') {
+    header('Location: ' . $urlKO);
+} elseif ($resultDecode['code'] == 'pending3ds') {
     $http_code = 101;
     updatelogs($MyVars, $resultDecode, $http_code);
-    // echo $resultDecode['embeddedB64'];
+
+    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Pending3DS");
+    $ipnData = [
+        'TransId' => $resultDecode['TransactionId'] ?? null,
+        'MerchantRef' => $RefOrder,
+        'Amount' => $amount,
+        'Status' => 'Pending3DS'
+    ];
+    
+    try {
+        $ipnResult = sendIpnNotification($ipnData);
+        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+    }
 
     $embeddedB64 = base64_decode($resultDecode['embeddedB64']);
     echo $embeddedB64;
