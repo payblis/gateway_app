@@ -4,6 +4,28 @@ function logOvriFlow($type, $data) {
     error_log("Flow type: " . $type . ", Data: " . print_r($data, true));
 }
 
+function logIpnAttempt($transactionId, $payload, $httpCode, $message) {
+    global $connection;
+    
+    $stmt = $connection->prepare("
+        INSERT INTO ipn_logs 
+        (transaction_id, payload, http_code, message, created_at) 
+        VALUES (?, ?, ?, ?, NOW())
+    ");
+    
+    $payloadJson = json_encode($payload);
+    $stmt->bind_param("ssis", $transactionId, $payloadJson, $httpCode, $message);
+    
+    try {
+        $stmt->execute();
+        error_log("IPN logged successfully for transaction: " . $transactionId);
+        return true;
+    } catch (Exception $e) {
+        error_log("Error logging IPN: " . $e->getMessage());
+        return false;
+    }
+}
+
 function sendIpnNotification($transactionData) {
     if (empty($transactionData['ipnURL'])) {
         error_log("Pas d'URL IPN dans les données de transaction");

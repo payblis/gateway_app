@@ -132,15 +132,16 @@ if ($resultDecode['code'] == 'success') {
     
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
     
-    // Récupérer l'URL IPN depuis les données décodées
-    $ipnURL = $decodedData['ipnURL'] ?? null;
+    // Décodage correct des données
+    $decodedData = unserialize(urldecode($userdata));
+    error_log("Données décodées: " . print_r($decodedData, true));
     
-    if ($ipnURL) {
+    if (isset($decodedData['ipnURL'])) {
         $ipnData = [
             'TransId' => $resultDecode['TransactionId'],
             'MerchantRef' => $RefOrder,
             'status' => 'APPROVED',
-            'ipnURL' => $ipnURL
+            'ipnURL' => $decodedData['ipnURL']
         ];
         
         try {
@@ -148,7 +149,6 @@ if ($resultDecode['code'] == 'success') {
             $ipnResult = sendIpnNotification($ipnData);
             error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
             
-            // Log IPN attempt
             logIpnAttempt(
                 $resultDecode['TransactionId'],
                 $ipnData,
@@ -162,9 +162,10 @@ if ($resultDecode['code'] == 'success') {
         }
     }
 
-    // Redirection vers l'URL de succès du marchand
-    if (!empty($decodedData['urlOK'])) {
-        header('Location: ' . $decodedData['urlOK']);
+    // Redirection vers l'URL du marchand
+    if (isset($decodedData['urlOK'])) {
+        error_log("Redirection vers: " . $decodedData['urlOK']);
+        header("Location: " . $decodedData['urlOK']);
         exit();
     } else {
         error_log("URL de succès non trouvée dans les données décodées");
@@ -193,7 +194,12 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    header('Location: ' . $urlKO);
+    $decodedData = unserialize(urldecode($userdata));
+    if (isset($decodedData['urlKO'])) {
+        error_log("Redirection vers: " . $decodedData['urlKO']);
+        header("Location: " . $decodedData['urlKO']);
+        exit();
+    }
 } elseif ($resultDecode['code'] == 'FATAL-500') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -218,7 +224,12 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    header('Location: ' . $urlKO);
+    $decodedData = unserialize(urldecode($userdata));
+    if (isset($decodedData['urlKO'])) {
+        error_log("Redirection vers: " . $decodedData['urlKO']);
+        header("Location: " . $decodedData['urlKO']);
+        exit();
+    }
 } elseif ($resultDecode['code'] == 'failed') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -249,7 +260,12 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    header('Location: ' . $urlKO);
+    $decodedData = unserialize(urldecode($userdata));
+    if (isset($decodedData['urlKO'])) {
+        error_log("Redirection vers: " . $decodedData['urlKO']);
+        header("Location: " . $decodedData['urlKO']);
+        exit();
+    }
 } elseif ($resultDecode['code'] == 'pending3ds') {
     $http_code = 101;
     updatelogs($MyVars, $resultDecode, $http_code);
