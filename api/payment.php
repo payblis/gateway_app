@@ -1,6 +1,6 @@
 <?php
 error_log("=== DÉBUT PAYMENT.PHP ===");
-require("../admin/include/config.php");
+require_once dirname(__FILE__) . '/../admin/include/config.php';
 
 if (!isset($_GET['token'])) {
     die(json_encode([

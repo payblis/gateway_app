@@ -1,5 +1,7 @@
 <?php
-require_once '../../admin/include/config.php';
+require_once dirname(__FILE__) . '/../../admin/include/config.php';
+// ou
+require_once $_SERVER['DOCUMENT_ROOT'] . '/admin/include/config.php';
 
 // Log du début de la requête IPN
 error_log("[Ovri IPN] Début du traitement IPN");

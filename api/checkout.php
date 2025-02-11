@@ -1,7 +1,8 @@
 <?php
 error_log("=== DÉBUT CHECKOUT.PHP ===");
-require('../admin/include/config.php');
-require('./includes/ipn_handler.php');
+require_once dirname(__FILE__) . '/../admin/include/config.php';
+// Ne plus inclure ipn_handler.php ici car il sera appelé séparément par Ovri
+// require('./includes/ipn_handler.php');
 
 error_log("POST data reçues: " . print_r($_POST, true));
 error_log("GET data reçues: " . print_r($_GET, true));
