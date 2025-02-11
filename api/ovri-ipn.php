@@ -34,11 +34,11 @@ error_log("Réponse OVRI décodée: " . print_r($ovri_response, true));
 
 if ($ovri_response) {
     // Récupérer l'URL IPN du marchand depuis la base de données
-    $merchantRef = $ovri_response['reforder'] ?? null;
+    $merchantRef = $ovri_response['MerchantRef'] ?? null;
     error_log("MerchantRef extrait: " . ($merchantRef ?? 'null'));
     
     if ($merchantRef) {
-        $stmt = $connection->prepare("SELECT user_data FROM transactions WHERE ref_order = ?");
+        $stmt = $connection->prepare("SELECT user_data, status FROM transactions WHERE ref_order = ?");
         $stmt->bind_param("s", $merchantRef);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -52,13 +52,22 @@ if ($ovri_response) {
             
             error_log("URL IPN du marchand: " . ($merchantIpnUrl ?? 'null'));
             
+            // Mettre à jour le statut de la transaction si nécessaire
+            if ($ovri_response['Status'] === '2') {
+                $updateStmt = $connection->prepare("UPDATE transactions SET status = 'paid', transaction_id = ? WHERE ref_order = ?");
+                $transId = $ovri_response['TransId'];
+                $updateStmt->bind_param("ss", $transId, $merchantRef);
+                $updateResult = $updateStmt->execute();
+                error_log("Mise à jour du statut transaction: " . ($updateResult ? "Succès" : "Échec"));
+            }
+            
             if ($merchantIpnUrl) {
                 // Préparer les données pour le marchand
                 $ipnData = [
-                    'TransId' => $ovri_response['TransactionId'] ?? null,
+                    'TransId' => $ovri_response['TransId'] ?? null,
                     'MerchantRef' => $merchantRef,
-                    'Amount' => $ovri_response['amount'] ?? null,
-                    'Status' => $ovri_response['status'] ?? null
+                    'Amount' => $ovri_response['Amount'] ?? null,
+                    'Status' => $ovri_response['Status'] ?? null
                 ];
                 
                 error_log("Données à envoyer au marchand: " . print_r($ipnData, true));
