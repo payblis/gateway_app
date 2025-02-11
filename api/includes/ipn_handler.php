@@ -78,93 +78,28 @@ function sendIpnNotification($transactionData) {
             return false;
         }
 
-        // Récupérer les données de la transaction avec une attente maximale
-        $maxAttempts = 3;
-        $attempt = 0;
-        $logData = null;
+        // Reformater l'ID de transaction (supprimer "OVRI-" et tout ce qui suit le premier tiret)
+        $originalTransId = $transactionData['TransId'] ?? '';
+        $formattedTransId = preg_replace('/^OVRI-(\d+).*$/', '$1', $originalTransId);
         
-        while ($attempt < $maxAttempts) {
-            $query = "SELECT request_body, response_body FROM ovri_logs WHERE transaction_id = ?";
-            $stmt = $connection->prepare($query);
-            
-            if (!$stmt) {
-                error_log("[IPN] Erreur préparation requête ovri_logs: " . $connection->error);
-                return false;
-            }
-            
-            $stmt->bind_param("s", $transactionData['TransId']);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            
-            if ($result && $result->num_rows > 0) {
-                $logData = $result->fetch_assoc();
-                break;
-            }
-            
-            $attempt++;
-            if ($attempt < $maxAttempts) {
-                error_log("[IPN] Tentative {$attempt} - Données non trouvées, nouvelle tentative dans 100ms");
-                usleep(100000); // 100ms pause
-            }
-        }
-        
-        if (!$logData) {
-            error_log("[IPN] Données non trouvées après {$maxAttempts} tentatives");
-            // Utiliser les données directement depuis transactionData
-            $requestData = [
-                'ipnURL' => $transactionData['ipnURL'],
-                'MerchantKey' => $transactionData['MerchantKey']
-            ];
-            $responseData = [];
-        } else {
-            $requestData = json_decode($logData['request_body'], true);
-            $responseData = json_decode($logData['response_body'], true);
-        }
-        
-        error_log("[IPN] Données de requête: " . print_r($requestData, true));
-        
-        // Préparer les données de notification
+        // Préparer les données de notification simplifiées
         $notificationData = [
-            'event' => 'payment.' . strtolower($transactionData['Status']),
-            'merchant_reference' => $transactionData['MerchantRef'],
-            'transaction_id' => $transactionData['TransId'],
-            'amount' => $transactionData['Amount'],
-            'status' => $transactionData['Status'],
-            'payment_details' => [
-                'card_brand' => $responseData['receipt']['cardbrand'] ?? 'UNKNOWN',
-                'card_last4' => $responseData['receipt']['cardpan'] ?? '****',
-                'authorization_code' => $responseData['receipt']['authorization'] ?? '000000',
-                'transaction_date' => date('Y-m-d H:i:s')
-            ]
+            'code' => 'success',
+            'status' => $transactionData['Status'] === '2' ? 'APPROVED' : 'DECLINED',
+            'TransactionId' => $formattedTransId,
+            'RefOrder' => $transactionData['MerchantRef']
         ];
-
-        // Ajouter des détails supplémentaires selon le statut
-        if ($transactionData['Status'] === 'Failed' || $transactionData['Status'] === 'Error') {
-            $notificationData['error'] = [
-                'code' => $responseData['code'] ?? 'unknown',
-                'message' => $responseData['message'] ?? 'Transaction failed'
-            ];
-        }
-
-        if ($transactionData['Status'] === 'Pending3DS') {
-            $notificationData['threeds'] = [
-                'status' => 'pending',
-                'required' => true
-            ];
-        }
         
         error_log("[IPN] Données à envoyer: " . print_r($notificationData, true));
         
         // Envoyer la notification
-        $ch = curl_init($transactionData['ipnURL']); // Utiliser l'URL directement depuis transactionData
+        $ch = curl_init($transactionData['ipnURL']);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => json_encode($notificationData),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                'X-Payblis-Signature: ' . hash_hmac('sha256', json_encode($notificationData), $transactionData['MerchantKey']),
-                'X-Payblis-Event: payment.' . strtolower($transactionData['Status'])
+                'Content-Type: application/json'
             ],
             CURLOPT_TIMEOUT => 10,
             CURLOPT_SSL_VERIFYPEER => false,
