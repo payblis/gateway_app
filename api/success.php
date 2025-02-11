@@ -22,11 +22,23 @@ error_log("Server variables: " . print_r($_SERVER, true));
 // Log the raw request
 error_log("Raw request: " . file_get_contents('php://input'));
 
+// Log the referrer URL in detail
+$referer = $_SERVER['HTTP_REFERER'] ?? 'No referer';
+error_log("Referer URL complète: " . $referer);
+
 // Si la réponse est en JSON, tentative de décodage
 if (isset($headers['Content-Type']) && strpos($headers['Content-Type'], 'application/json') !== false) {
     $json_data = json_decode($raw_post_data, true);
     error_log("Decoded JSON data: " . print_r($json_data, true));
 }
+
+// Log toutes les variables de session si elles existent
+if (isset($_SESSION)) {
+    error_log("Session variables: " . print_r($_SESSION, true));
+}
+
+// Log tous les cookies
+error_log("Cookies: " . print_r($_COOKIE, true));
 
 require('../admin/include/config.php');
 error_log("Config chargée");
