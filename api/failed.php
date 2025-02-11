@@ -69,4 +69,4 @@ error_log("=== FIN FAILED.PHP ===");
     <h1>Payment Failed</h1>
     <p>An error occurred during the payment process.</p>
 </body>
-</html> 
+</html>

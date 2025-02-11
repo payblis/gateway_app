@@ -15,9 +15,17 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
     error_log("[IPN] TransactionId: " . $transactionId);
     
     try {
-        $query = "INSERT INTO ipn_logs 
-                 (transaction_id, payload, response_code, response, status) 
-                 VALUES (?, ?, ?, ?, ?)";
+        // Vérifions d'abord la structure de la table
+        $checkTable = $connection->query("SHOW CREATE TABLE ipn_logs");
+        error_log("[IPN] Structure de la table: " . print_r($checkTable->fetch_row(), true));
+        
+        // Simplifions la requête pour éviter les problèmes de bind_param
+        $query = "INSERT INTO ipn_logs SET 
+                 transaction_id = ?,
+                 payload = ?,
+                 response_code = ?,
+                 response = ?,
+                 status = ?";
         
         $stmt = $connection->prepare($query);
         if (!$stmt) {
@@ -28,13 +36,24 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
         $payloadJson = json_encode($payload);
         $status = ($httpCode == 200) ? 'success' : 'failed';
         
-        $stmt->bind_param("ssiss", 
+        error_log("[IPN] Données à insérer:");
+        error_log("[IPN] - transaction_id: " . $transactionId);
+        error_log("[IPN] - payload: " . $payloadJson);
+        error_log("[IPN] - response_code: " . $httpCode);
+        error_log("[IPN] - response: " . $response);
+        error_log("[IPN] - status: " . $status);
+        
+        // Vérifions que nous avons le bon nombre de paramètres
+        if (!$stmt->bind_param("ssiss", 
             $transactionId,
             $payloadJson,
             $httpCode,
             $response,
             $status
-        );
+        )) {
+            error_log("[IPN] Erreur bind_param: " . $stmt->error);
+            return false;
+        }
         
         if (!$stmt->execute()) {
             error_log("[IPN] Erreur execution: " . $stmt->error);
@@ -46,6 +65,7 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
         
     } catch (Exception $e) {
         error_log("[IPN] Exception lors de l'enregistrement: " . $e->getMessage());
+        error_log("[IPN] Trace: " . $e->getTraceAsString());
         return false;
     }
 }

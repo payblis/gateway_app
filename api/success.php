@@ -1,50 +1,92 @@
 <?php
-error_log("=== DÉBUT SUCCESS.PHP ===");
-error_log("GET params: " . print_r($_GET, true));
-error_log("POST params: " . print_r($_POST, true));
-
 require('../admin/include/config.php');
-error_log("Config chargée");
-
 require('./includes/ipn_handler.php');
-error_log("Handler IPN chargé");
 
-// Vérifier tous les paramètres reçus
-error_log("GET: " . print_r($_GET, true));
-error_log("POST: " . print_r($_POST, true));
+// Log au début du script
+error_log("=== Début success.php ===");
+error_log("GET params: " . print_r($_GET, true));
 
-// Récupérer les paramètres de l'URL
-$TransId = $_GET['transactionId'] ?? null;
-$Status = $_GET['status'] ?? null;
+// Récupérer les paramètres
+$MerchantRef = $_GET['MerchantRef'] ?? null;
+$amount = $_GET['Amount'] ?? null;
+$TransId = $_GET['TransId'] ?? null;
+$Status = $_GET['Status'] ?? null;
 
-error_log("TransId: " . $TransId);
-error_log("Status: " . $Status);
+error_log("Paramètres récupérés: " . json_encode([
+    'MerchantRef' => $MerchantRef,
+    'Amount' => $amount,
+    'TransId' => $TransId,
+    'Status' => $Status
+]));
 
-// Récupérer les informations de la transaction depuis ovri_logs
-if ($TransId) {
-    $query = "SELECT request_body FROM ovri_logs WHERE transaction_id = ?";
-    $stmt = $connection->prepare($query);
+if (!$MerchantRef || !$TransId) {
+    error_log("Paramètres manquants dans success.php");
+    die("Paramètres manquants");
+}
+
+// Vérifier la transaction
+$query = "SELECT * FROM transactions WHERE `ref_order` = ?";
+$stmt = $connection->prepare($query);
+$stmt->bind_param("s", $MerchantRef);
+$stmt->execute();
+$result = $stmt->get_result();
+
+error_log("Recherche transaction pour ref_order: " . $MerchantRef);
+
+if ($result->num_rows > 0) {
+    error_log("Transaction trouvée");
+    $row = $result->fetch_assoc();
+    
+    // Mettre à jour le statut
+    $updateStmt = $connection->prepare("UPDATE transactions SET status = 'paid' WHERE ref_order = ?");
+    $updateStmt->bind_param("s", $MerchantRef);
+    $updateStmt->execute();
+    error_log("Statut mis à jour pour ref_order: " . $MerchantRef);
+
+    // Préparer les données pour l'IPN
+    $transactionData = [
+        'MerchantRef' => $MerchantRef,
+        'Amount' => $amount,
+        'TransId' => $TransId,
+        'Status' => $Status
+    ];
+
+    error_log("Tentative d'envoi IPN avec données: " . json_encode($transactionData));
+    
+    try {
+        $ipnResult = sendIpnNotification($transactionData);
+        error_log("Résultat IPN: " . ($ipnResult ? "Succès" : "Échec"));
+    } catch (Exception $e) {
+        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
+    }
+
+    // Récupérer l'URL de succès
+    $getdata = "SELECT request_body FROM ovri_logs WHERE transaction_id = ?";
+    $stmt = $connection->prepare($getdata);
     $stmt->bind_param("s", $TransId);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     if ($result->num_rows > 0) {
-        error_log("Transaction trouvée dans ovri_logs");
-        $row = $result->fetch_assoc();
-        $requestData = json_decode($row['request_body'], true);
+        $get = $result->fetch_assoc();
+        $user_Req = $get['request_body'];
+        $dataDecoded = json_decode($user_Req, true);
+        $success_Url = $dataDecoded['urlOK'];
+
+        error_log("Redirection vers: " . $success_Url);
         
-        // Redirection simple vers urlOK sans paramètres
-        if (isset($requestData['urlOK'])) {
-            error_log("Redirection vers: " . $requestData['urlOK']);
-            header('Location: ' . $requestData['urlOK']);
-            exit;
-        }
-    } else {
-        error_log("Aucune transaction trouvée pour TransId: " . $TransId);
+        header('Location: ' . $success_Url . '?MerchantRef=' . urlencode($MerchantRef) . 
+               '&Amount=' . urlencode($amount) . 
+               '&TransId=' . urlencode($TransId) . 
+               '&Status=Success');
+        exit;
     }
+} else {
+    error_log("Aucune transaction trouvée pour ref_order: " . $MerchantRef);
+    echo "No records found for Transaction ID: " . htmlspecialchars($MerchantRef);
 }
 
-error_log("=== FIN SUCCESS.PHP ===");
+error_log("=== Fin success.php ===");
 
 // Fermer la connexion
 mysqli_close($connection);
