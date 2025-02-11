@@ -15,11 +15,6 @@ error_log("Headers reçus: " . print_r($headers, true));
 // Log la méthode de requête
 error_log("Méthode de requête: " . $_SERVER['REQUEST_METHOD']);
 
-// Log toutes les variables globales
-error_log("GET params: " . print_r($_GET, true));
-error_log("POST params: " . print_r($_POST, true));
-error_log("REQUEST params: " . print_r($_REQUEST, true));
-
 // Vérifier le Content-Type
 $contentType = $headers['Content-Type'] ?? $headers['content-type'] ?? 'none';
 error_log("Content-Type: " . $contentType);
@@ -42,7 +37,7 @@ if ($ovri_response) {
         $stmt = $connection->prepare("
             SELECT t.*, o.request_body 
             FROM transactions t
-            LEFT JOIN ovri_logs o ON t.ref_order = JSON_UNQUOTE(JSON_EXTRACT(o.request_body, '$.RefOrder'))
+            INNER JOIN ovri_logs o ON t.ref_order = JSON_UNQUOTE(JSON_EXTRACT(o.request_body, '$.RefOrder'))
             WHERE t.ref_order = ?
             ORDER BY o.created_at DESC
             LIMIT 1
@@ -75,14 +70,28 @@ if ($ovri_response) {
                     'TransId' => $ovri_response['TransId'] ?? null,
                     'MerchantRef' => $merchantRef,
                     'Amount' => $ovri_response['Amount'] ?? null,
-                    'Status' => $ovri_response['Status'] ?? null
+                    'Status' => $ovri_response['Status'] ?? null,
+                    'CardType' => $ovri_response['CardType'] ?? null,
+                    'CardNumber' => $ovri_response['CardNumber'] ?? null,
+                    'BankTrxID' => $ovri_response['BankTrxID'] ?? null
                 ];
                 
                 error_log("Données à envoyer au marchand: " . print_r($ipnData, true));
                 
                 // Envoyer à l'URL IPN du marchand
                 try {
-                    $ipnResult = sendIpnNotification($ipnData, $merchantIpnUrl);
+                    $ch = curl_init($merchantIpnUrl);
+                    curl_setopt($ch, CURLOPT_POST, 1);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($ipnData));
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                    
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+                    
+                    error_log("Réponse IPN (HTTP $httpCode): " . $response);
+                    $ipnResult = ($httpCode >= 200 && $httpCode < 300);
                     error_log("Résultat envoi IPN au marchand: " . ($ipnResult ? "Succès" : "Échec"));
                 } catch (Exception $e) {
                     error_log("Erreur lors de l'envoi IPN au marchand: " . $e->getMessage());
