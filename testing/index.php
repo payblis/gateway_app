@@ -12,8 +12,7 @@ $MyVars = array(
     'userIP' => '192.168.1.1', // Customer's IP
     'lang' => 'en', // Language
     'urlOK' => 'http://localhost/testPayment/success.php',
-    'urlKO' => 'http://localhost/testPayment/failed.php',
-    'urlIPN' => 'http://localhost/testPayment/ipn.php'
+    'urlKO' => 'http://localhost/testPayment/failed.php'
 );
 
 // Serialize the data (convert array to string format)
