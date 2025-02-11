@@ -72,6 +72,12 @@ function sendIpnNotification($transactionData) {
     error_log("[IPN] Données reçues: " . print_r($transactionData, true));
     
     try {
+        // Vérifier d'abord si nous avons une URL IPN
+        if (empty($transactionData['ipnURL'])) {
+            error_log("[IPN] Pas d'URL IPN dans les données de transaction");
+            return false;
+        }
+
         // Récupérer les données de la transaction avec une attente maximale
         $maxAttempts = 3;
         $attempt = 0;
@@ -104,10 +110,10 @@ function sendIpnNotification($transactionData) {
         
         if (!$logData) {
             error_log("[IPN] Données non trouvées après {$maxAttempts} tentatives");
-            // Continuer avec des données minimales
+            // Utiliser les données directement depuis transactionData
             $requestData = [
-                'ipnURL' => $transactionData['ipnURL'] ?? null,
-                'MerchantKey' => $transactionData['MerchantKey'] ?? null
+                'ipnURL' => $transactionData['ipnURL'],
+                'MerchantKey' => $transactionData['MerchantKey']
             ];
             $responseData = [];
         } else {
@@ -117,43 +123,16 @@ function sendIpnNotification($transactionData) {
         
         error_log("[IPN] Données de requête: " . print_r($requestData, true));
         
-        if (empty($requestData['ipnURL'])) {
-            error_log("[IPN] Pas d'URL IPN définie");
-            return false;
-        }
-        
-        // Déterminer l'événement en fonction du statut
-        $event = 'payment.';
-        switch ($transactionData['Status']) {
-            case 'Success':
-                $event .= 'completed';
-                break;
-            case 'Failed':
-                $event .= 'failed';
-                break;
-            case 'Declined':
-                $event .= 'declined';
-                break;
-            case 'Error':
-                $event .= 'error';
-                break;
-            case 'Pending3DS':
-                $event .= 'pending_3ds';
-                break;
-            default:
-                $event .= 'unknown';
-        }
-        
         // Préparer les données de notification
         $notificationData = [
-            'event' => $event,
+            'event' => 'payment.' . strtolower($transactionData['Status']),
             'merchant_reference' => $transactionData['MerchantRef'],
             'transaction_id' => $transactionData['TransId'],
             'amount' => $transactionData['Amount'],
             'status' => $transactionData['Status'],
             'payment_details' => [
-                'card_brand' => $responseData['receipt']['cardbrand'] ?? 'VISA',
-                'card_last4' => substr($responseData['receipt']['cardpan'] ?? '', -4),
+                'card_brand' => $responseData['receipt']['cardbrand'] ?? 'UNKNOWN',
+                'card_last4' => $responseData['receipt']['cardpan'] ?? '****',
                 'authorization_code' => $responseData['receipt']['authorization'] ?? '000000',
                 'transaction_date' => date('Y-m-d H:i:s')
             ]
@@ -177,15 +156,15 @@ function sendIpnNotification($transactionData) {
         error_log("[IPN] Données à envoyer: " . print_r($notificationData, true));
         
         // Envoyer la notification
-        $ch = curl_init($requestData['ipnURL']);
+        $ch = curl_init($transactionData['ipnURL']); // Utiliser l'URL directement depuis transactionData
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => json_encode($notificationData),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
-                'X-Payblis-Signature: ' . hash_hmac('sha256', json_encode($notificationData), $requestData['MerchantKey']),
-                'X-Payblis-Event: ' . $event
+                'X-Payblis-Signature: ' . hash_hmac('sha256', json_encode($notificationData), $transactionData['MerchantKey']),
+                'X-Payblis-Event: payment.' . strtolower($transactionData['Status'])
             ],
             CURLOPT_TIMEOUT => 10,
             CURLOPT_SSL_VERIFYPEER => false,
