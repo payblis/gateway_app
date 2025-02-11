@@ -1,5 +1,7 @@
 <?php
-error_log("=== DEBUT SUCCESS.PHP ===");
+error_log("=== DÉBUT SUCCESS.PHP ===");
+error_log("GET params: " . print_r($_GET, true));
+error_log("POST params: " . print_r($_POST, true));
 
 require('../admin/include/config.php');
 error_log("Config chargée");
