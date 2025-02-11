@@ -155,7 +155,7 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
+    header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'FATAL-500') {
     $http_code = 500;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -165,7 +165,7 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&message=' . $resultDecode['message']);
+    header('Location: ' . $urlKO);
 }
 
 elseif ($resultDecode['code'] == 'failed') {
@@ -177,7 +177,7 @@ elseif ($resultDecode['code'] == 'failed') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    header('Location: ' . $urlKO . '?code=' . $resultDecode['code'] . '&truedecline=' . $resultDecode['truedecline'].'&errors=Invalid card number');
+    header('Location: ' . $urlKO);
 }
 
 elseif ($resultDecode['code'] == 'pending3ds') {
