@@ -126,7 +126,24 @@ function insertTrans($reqbody)
 }
 
 $inserted_id = insertTrans($MyVars);
+if (!$inserted_id) {
+    die(json_encode([
+        'Code' => 500,
+        'ErrorCode' => '000005',
+        'ErrorDescription' => 'Failed to create transaction record'
+    ]));
+}
+
 $encodedData = urlencode(serialize($MyVars));
+
+// Construction des URLs absolues
+$baseUrl = 'https://' . $_SERVER['HTTP_HOST'];
+$successUrl = $baseUrl . '/api/success.php';
+$failureUrl = $baseUrl . '/api/failed.php';
+$ipnUrl = $baseUrl . '/api/includes/ipn_handler.php';
+
+// Log des URLs
+error_log("[Payment] URLs configurées - Success: $successUrl, Failure: $failureUrl, IPN: $ipnUrl");
 
 // Enregistrement dans ovri_logs
 try {
@@ -174,9 +191,8 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
 
             <form id="paymentForm" action="checkout.php" method="POST">
 
-                <input type="hidden" name="array" value="<?php echo htmlspecialchars($encodedData, ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="inserted_id" value="<?php echo htmlspecialchars($inserted_id, ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="ipnURL" value="<?php echo htmlspecialchars($MyVars['ipnURL'], ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="array" value="<?php echo htmlspecialchars($encodedData, ENT_QUOTES, 'UTF-8'); ?>">
+                <input type="hidden" name="inserted_id" value="<?php echo htmlspecialchars($inserted_id, ENT_QUOTES, 'UTF-8'); ?>">
 
                 <div class="form-group mt-3">
                     <label for="cardHolderName">Card Name *</label>
@@ -239,13 +255,6 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
                 </div>
             </div>
     </footer>
-
-    <!-- Ajout d'un loader pour le traitement -->
-    <div id="paymentLoader" style="display: none;">
-        <div class="spinner-border text-primary" role="status">
-            <span class="sr-only">Processing payment...</span>
-        </div>
-    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -390,47 +399,11 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
                 }
 
                 if (isValid) {
-                    // Afficher le loader
-                    document.getElementById('paymentLoader').style.display = 'block';
-                    
-                    // Désactiver le bouton de soumission
-                    const submitButton = this.querySelector('button[type="submit"]');
-                    submitButton.disabled = true;
-                    submitButton.innerHTML = 'Processing...';
-
-                    // Soumettre le formulaire
                     this.submit();
                 }
             });
-
-            // Ajout de la protection contre la double soumission
-            window.onbeforeunload = function() {
-                const form = document.getElementById('paymentForm');
-                if (form) {
-                    const submitButton = form.querySelector('button[type="submit"]');
-                    if (submitButton) {
-                        submitButton.disabled = true;
-                    }
-                }
-            };
         });
     </script>
-
-    <style>
-        /* Ajout des styles pour le loader */
-        #paymentLoader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-    </style>
 
 </body>
 

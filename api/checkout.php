@@ -34,7 +34,7 @@ function updatelogs($reqbody, $resbody, $http_code)
     $stmt->close();
 }
 
-// Getting POST data
+// Récupération des données POST
 $inserted_id = $_POST['inserted_id'];
 $cardHoldername = $_POST['cardHolderName'];
 $cardno = $_POST['cardno'];
@@ -46,43 +46,25 @@ $userdata = $_POST['array'];
 $decodedData = urldecode($userdata);
 $MyVars = unserialize($decodedData);
 
-// Need customer IP too later
-$MerchantKey = $MyVars['MerchantKey'];
-$amount = $MyVars['amount'];
-$RefOrder = $MyVars['RefOrder'];
-$Customer_Email = $MyVars['Customer_Email'];
-$Customer_Phone = $MyVars['Customer_Phone'];
-$Customer_FirstName = $MyVars['Customer_FirstName'];
-$lang = $MyVars['lang'];
-$UserIP = $MyVars['userIP'];
-$urlOK = $MyVars['urlOK'];
-$urlKO = $MyVars['urlKO'];
-
-// Construire les URLs absolues
+// Construction des URLs
 $ipnUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/api/includes/ipn_handler.php';
 $successUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/api/success.php';
 $failureUrl = 'https://' . $_SERVER['HTTP_HOST'] . '/api/failed.php';
 
-// Log de la construction des URLs
 error_log("[Ovri Checkout] URLs configured - IPN: $ipnUrl, Success: $successUrl, Failure: $failureUrl");
 
-// API endpoint and credentials
-define('apiEndPoint', 'https://api.ovri.app/payment/authorization');
-define('myApiKeyPos', '695066a9312825a06API66a9312825a09');
-define('mySecretKeyPos', 'YjMxZGVkNjk4MjY1OWI1ODg0MzhiY2RiNmY4YTI0M2U=');
-
-// Prepare the request data
+// Préparation de la requête vers Ovri
 $myrequest = array(
     'capture' => true,
-    'amount' => $amount,
-    'reforder' => $RefOrder,
+    'amount' => $MyVars['amount'],
+    'reforder' => $MyVars['RefOrder'],
     'cardHolderName' => $cardHoldername,
-    'cardHolderEmail' => $Customer_Email,
+    'cardHolderEmail' => $MyVars['Customer_Email'],
     'cardno' => $cardno,
     'edMonth' => $expMonth,
     'edYear' => $expYear,
     'cvv' => $CVN,
-    'customerIP' => $UserIP,
+    'customerIP' => $MyVars['userIP'],
     'urlIPN' => $ipnUrl,
     'urlOK' => $successUrl,
     'urlKO' => $failureUrl,
@@ -96,36 +78,23 @@ $myrequest = array(
     'browserTimeZone' => -5,
 );
 
-function GenerateSignature(array $jsondata)
-{
-    $stringSign = base64_encode(hash('sha512', json_encode($jsondata) . mySecretKeyPos));
-    return myApiKeyPos . '.' . $stringSign;
-}
-
-$signature = GenerateSignature($myrequest);
-
-// Sending the request with CURL
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, apiEndPoint);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+// Envoi de la requête à Ovri
+$ch = curl_init(apiEndPoint);
+curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+    'Content-Type: application/json',
+    'apikey: ' . myApiKeyPos,
+    'secretkey: ' . mySecretKeyPos
+));
 curl_setopt($ch, CURLOPT_POST, 1);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($myrequest));
-$headers = array();
-$headers[] = 'Content-Type: application/json';
-$headers[] = 'Authorization: Bearer ' . $signature;
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
 $result = curl_exec($ch);
-
-if (curl_errno($ch)) {
-    echo 'Error:' . curl_error($ch);
-}
-
-curl_close($ch);
-
-// Decode the result
 $resultDecode = json_decode($result, true);
 
-// Handle the result
+error_log("[Ovri Checkout] Response from Ovri: " . print_r($resultDecode, true));
+
 if ($resultDecode['code'] == 'success') {
     $http_code = 200;
     updatelogs($MyVars, $resultDecode, $http_code);
@@ -135,125 +104,34 @@ if ($resultDecode['code'] == 'success') {
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
 
-    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
-    $ipnData = [
-        'TransId' => $resultDecode['TransactionId'],
-        'MerchantRef' => $RefOrder,
-        'Amount' => $amount,
-        'Status' => 'Success'
-    ];
-    
-    try {
-        usleep(100000); // 100ms pause
-        $ipnResult = sendIpnNotification($ipnData);
-        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-    } catch (Exception $e) {
-        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-    }
-
     header('Location: ' . $successUrl);
-} elseif ($resultDecode['code'] == '000006') {
-    $http_code = 402;
-    updatelogs($MyVars, $resultDecode, $http_code);
-
-    $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
-    $status = "failed";
-    $stmt->bind_param("si", $status, $inserted_id);
-    $stmt->execute();
-
-    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Declined");
-    $ipnData = [
-        'TransId' => $resultDecode['TransactionId'] ?? null,
-        'MerchantRef' => $RefOrder,
-        'Amount' => $amount,
-        'Status' => 'Declined'
-    ];
-    
-    try {
-        $ipnResult = sendIpnNotification($ipnData);
-        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-    } catch (Exception $e) {
-        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-    }
-
-    header('Location: ' . $urlKO);
-} elseif ($resultDecode['code'] == 'FATAL-500') {
-    $http_code = 500;
-    updatelogs($MyVars, $resultDecode, $http_code);
-
-    $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
-    $status = "failed";
-    $stmt->bind_param("si", $status, $inserted_id);
-    $stmt->execute();
-
-    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Error");
-    $ipnData = [
-        'TransId' => $resultDecode['TransactionId'] ?? null,
-        'MerchantRef' => $RefOrder,
-        'Amount' => $amount,
-        'Status' => 'Error'
-    ];
-    
-    try {
-        $ipnResult = sendIpnNotification($ipnData);
-        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-    } catch (Exception $e) {
-        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-    }
-
-    header('Location: ' . $urlKO);
-} elseif ($resultDecode['code'] == 'failed') {
-    $http_code = 500;
-    updatelogs($MyVars, $resultDecode, $http_code);
-
-    $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
-    $status = "failed";
-    $stmt->bind_param("si", $status, $inserted_id);
-    $stmt->execute();
-
-    // Décoder les données utilisateur pour obtenir ipnURL et MerchantKey
-    $decodedData = unserialize(urldecode($userdata));
-    
-    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Failed");
-    $ipnData = [
-        'TransId' => $resultDecode['TransactionId'] ?? $resultDecode['transactionId'] ?? uniqid('FAILED-'),
-        'MerchantRef' => $RefOrder,
-        'Amount' => $amount,
-        'Status' => 'Failed',
-        'ipnURL' => $decodedData['ipnURL'] ?? null,
-        'MerchantKey' => $decodedData['MerchantKey'] ?? null
-    ];
-    
-    try {
-        usleep(100000); // 100ms pause
-        $ipnResult = sendIpnNotification($ipnData);
-        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-    } catch (Exception $e) {
-        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-    }
-
-    header('Location: ' . $urlKO);
+    exit;
 } elseif ($resultDecode['code'] == 'pending3ds') {
     $http_code = 101;
     updatelogs($MyVars, $resultDecode, $http_code);
 
-    error_log("Tentative d'envoi IPN depuis checkout.php - Status: Pending3DS");
-    $ipnData = [
-        'TransId' => $resultDecode['TransactionId'] ?? null,
-        'MerchantRef' => $RefOrder,
-        'Amount' => $amount,
-        'Status' => 'Pending3DS'
-    ];
-    
-    try {
-        $ipnResult = sendIpnNotification($ipnData);
-        error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-    } catch (Exception $e) {
-        error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
-    }
+    // Pour 3DS, on met à jour le statut en pending
+    $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
+    $status = "pending";
+    $stmt->bind_param("si", $status, $inserted_id);
+    $stmt->execute();
 
+    // On affiche le formulaire 3DS
     $embeddedB64 = base64_decode($resultDecode['embeddedB64']);
     echo $embeddedB64;
+    exit;
+} else {
+    // Cas d'erreur
+    $http_code = 500;
+    updatelogs($MyVars, $resultDecode, $http_code);
+
+    $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
+    $status = "failed";
+    $stmt->bind_param("si", $status, $inserted_id);
+    $stmt->execute();
+
+    header('Location: ' . $failureUrl);
+    exit;
 }
 
 error_log("=== FIN CHECKOUT.PHP ===");
