@@ -19,12 +19,38 @@ try {
     error_log("Status: " . ($status ?? 'NULL'));
     error_log("Amount: " . ($amount ?? 'NULL'));
 
-    if (!$merchantRef || !$status) {
+    if (!$merchantRef || !$status || !$transId) {
         error_log("ERREUR: Paramètres manquants");
         throw new Exception("Paramètres manquants");
     }
 
-    error_log("Traitement transaction: TransId=$transId, MerchantRef=$merchantRef, Status=$status");
+    // Vérifier d'abord le statut dans ovri_logs
+    error_log("Vérification du statut dans ovri_logs pour TransId: $transId");
+    $checkStatusStmt = $connection->prepare("
+        SELECT response_body 
+        FROM ovri_logs 
+        WHERE transaction_id = ? 
+        AND request_type = 'ipn'
+        ORDER BY created_at DESC 
+        LIMIT 1
+    ");
+
+    if (!$checkStatusStmt) {
+        error_log("ERREUR MySQL (prepare check status): " . $connection->error);
+        throw new Exception("Erreur de préparation de la requête de vérification");
+    }
+
+    $checkStatusStmt->bind_param("s", $transId);
+    $checkStatusStmt->execute();
+    $statusResult = $checkStatusStmt->get_result();
+    $statusRow = $statusResult->fetch_assoc();
+
+    error_log("Résultat de la vérification du statut: " . print_r($statusRow, true));
+
+    // Déterminer le statut final
+    $ipnData = $statusRow ? json_decode($statusRow['response_body'], true) : null;
+    $transactionStatus = ($ipnData && $ipnData['status'] === 'APPROVED') ? 'paid' : 'failed';
+    error_log("Status final déterminé: $transactionStatus");
 
     // Mise à jour du statut de la transaction
     $stmt = $connection->prepare("
@@ -38,10 +64,6 @@ try {
         throw new Exception("Erreur de préparation de la requête");
     }
     
-    // Status 2 = APPROVED, 6 = DECLINED
-    $transactionStatus = ($status == '2') ? 'paid' : 'failed';
-    error_log("Status déterminé: $transactionStatus (basé sur status=$status)");
-    
     $stmt->bind_param("ss", $transactionStatus, $merchantRef);
     $updateResult = $stmt->execute();
     
@@ -52,50 +74,80 @@ try {
     
     error_log("Mise à jour transaction réussie. Affected rows: " . $stmt->affected_rows);
 
-    // Récupération de la transaction
+    // Récupération des URLs depuis ovri_logs
+    error_log("Récupération des URLs depuis ovri_logs");
     $urlStmt = $connection->prepare("
-        SELECT token, merchant_key 
-        FROM transactions 
-        WHERE ref_order = ?
+        SELECT request_body 
+        FROM ovri_logs 
+        WHERE transaction_id = ? 
+        AND request_type = 'via card'
+        ORDER BY created_at ASC 
+        LIMIT 1
     ");
     
     if (!$urlStmt) {
-        error_log("ERREUR MySQL (prepare select): " . $connection->error);
-        throw new Exception("Erreur de préparation de la requête de sélection");
+        error_log("ERREUR MySQL (prepare select URLs): " . $connection->error);
+        throw new Exception("Erreur de préparation de la requête URLs");
     }
     
-    $urlStmt->bind_param("s", $merchantRef);
-    $selectResult = $urlStmt->execute();
-    
-    if (!$selectResult) {
-        error_log("ERREUR MySQL (execute select): " . $urlStmt->error);
-        throw new Exception("Erreur lors de la récupération de la transaction");
-    }
-    
+    $urlStmt->bind_param("s", $transId);
+    $urlStmt->execute();
     $result = $urlStmt->get_result();
-    error_log("Nombre de résultats trouvés: " . $result->num_rows);
     
     if ($row = $result->fetch_assoc()) {
-        error_log("Données transaction trouvées:");
-        error_log("Token: " . ($row['token'] ?? 'NULL'));
-        error_log("Merchant Key: " . ($row['merchant_key'] ?? 'NULL'));
+        error_log("Données request_body trouvées: " . $row['request_body']);
+        $requestData = json_decode($row['request_body'], true);
         
-        $decodedData = unserialize(base64_decode($row['token']));
-        error_log("Données décodées: " . print_r($decodedData, true));
+        // Décoder les données du marchand
+        $merchantData = json_decode(urldecode($requestData['array']), true);
+        error_log("Données merchant décodées: " . print_r($merchantData, true));
         
         $redirectUrl = ($transactionStatus == 'paid') ? 
-            ($decodedData['urlOK'] ?? null) : 
-            ($decodedData['urlKO'] ?? null);
+            ($merchantData['urlOK'] ?? null) : 
+            ($merchantData['urlKO'] ?? null);
         
         error_log("URL de redirection déterminée: " . ($redirectUrl ?? 'NULL'));
         
+        // Log de la réponse dans ovri_logs
+        $logStmt = $connection->prepare("
+            INSERT INTO ovri_logs (
+                transaction_id, 
+                request_type,
+                request_body,
+                response_body,
+                http_code,
+                token
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        ");
+
+        if ($logStmt) {
+            $requestType = 'callback';
+            $requestBody = json_encode($_GET);
+            $responseBody = json_encode(['status' => $transactionStatus, 'redirect' => $redirectUrl]);
+            $httpCode = 200;
+            $token = $merchantRef;
+
+            $logStmt->bind_param("ssssss", 
+                $transId,
+                $requestType,
+                $requestBody,
+                $responseBody,
+                $httpCode,
+                $token
+            );
+            $logStmt->execute();
+            error_log("Log de la réponse enregistré dans ovri_logs");
+        } else {
+            error_log("ATTENTION: Impossible de logger la réponse: " . $connection->error);
+        }
+
         if ($redirectUrl) {
             error_log("Redirection vers: $redirectUrl");
             header("Location: " . $redirectUrl);
             exit();
         }
     } else {
-        error_log("ERREUR: Transaction non trouvée pour ref_order: $merchantRef");
+        error_log("ERREUR: Données URLs non trouvées pour TransId: $transId");
     }
     
     error_log("ERREUR: Aucune URL de redirection trouvée");
