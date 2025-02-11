@@ -35,7 +35,7 @@ if ($ovri_response) {
     if ($merchantRef) {
         // Récupérer la transaction et les logs OVRI associés
         $stmt = $connection->prepare("
-            SELECT t.*, o.request_body 
+            SELECT t.*, o.request_body, o.id as ovri_log_id 
             FROM transactions t
             INNER JOIN ovri_logs o ON t.ref_order = JSON_UNQUOTE(JSON_EXTRACT(o.request_body, '$.RefOrder'))
             WHERE t.ref_order = ?
@@ -62,6 +62,18 @@ if ($ovri_response) {
                 $updateStmt->bind_param("s", $merchantRef);
                 $updateResult = $updateStmt->execute();
                 error_log("Mise à jour du statut transaction: " . ($updateResult ? "Succès" : "Échec"));
+                
+                // Mettre à jour ovri_logs avec la réponse IPN
+                $updateOvriLogStmt = $connection->prepare("
+                    UPDATE ovri_logs 
+                    SET response_body = ?, 
+                        http_code = 200 
+                    WHERE id = ?
+                ");
+                $ovriResponse = json_encode($ovri_response);
+                $ovriLogId = $transaction['ovri_log_id'];
+                $updateOvriLogStmt->bind_param("si", $ovriResponse, $ovriLogId);
+                $updateOvriLogStmt->execute();
             }
             
             if ($merchantIpnUrl) {
@@ -92,9 +104,42 @@ if ($ovri_response) {
                     
                     error_log("Réponse IPN (HTTP $httpCode): " . $response);
                     $ipnResult = ($httpCode >= 200 && $httpCode < 300);
+                    
+                    // Créer l'entrée dans ipn_logs
+                    $ipnLogStmt = $connection->prepare("
+                        INSERT INTO ipn_logs (
+                            transaction_id, 
+                            payload, 
+                            response_code, 
+                            response, 
+                            status
+                        ) VALUES (?, ?, ?, ?, ?)
+                    ");
+                    $transId = $ovri_response['TransId'];
+                    $ipnPayload = json_encode($ipnData);
+                    $ipnStatus = $ipnResult ? 'success' : 'failed';
+                    $ipnLogStmt->bind_param("sssss", $transId, $ipnPayload, $httpCode, $response, $ipnStatus);
+                    $ipnLogStmt->execute();
+                    
                     error_log("Résultat envoi IPN au marchand: " . ($ipnResult ? "Succès" : "Échec"));
                 } catch (Exception $e) {
                     error_log("Erreur lors de l'envoi IPN au marchand: " . $e->getMessage());
+                    
+                    // Log l'erreur dans ipn_logs
+                    $ipnLogStmt = $connection->prepare("
+                        INSERT INTO ipn_logs (
+                            transaction_id, 
+                            payload, 
+                            response_code, 
+                            response, 
+                            status
+                        ) VALUES (?, ?, 500, ?, 'failed')
+                    ");
+                    $transId = $ovri_response['TransId'];
+                    $ipnPayload = json_encode($ipnData);
+                    $errorMessage = $e->getMessage();
+                    $ipnLogStmt->bind_param("sss", $transId, $ipnPayload, $errorMessage);
+                    $ipnLogStmt->execute();
                 }
             }
         }
