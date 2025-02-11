@@ -6,7 +6,10 @@ require('../admin/include/config.php');
 function sendIpnNotification($transactionData) {
     global $connection;
     
-    // Récupérer les informations complètes de la transaction
+    // Log de début
+    error_log("Début de sendIpnNotification pour TransId: " . $transactionData['TransId']);
+    
+    // Récupérer les informations de la transaction
     $stmt = $connection->prepare("SELECT request_body, response_body FROM ovri_logs WHERE transaction_id = ?");
     $stmt->bind_param("s", $transactionData['TransId']);
     $stmt->execute();
@@ -14,17 +17,21 @@ function sendIpnNotification($transactionData) {
     $logData = $result->fetch_assoc();
     
     if (!$logData) {
+        error_log("Aucune donnée trouvée dans ovri_logs pour TransId: " . $transactionData['TransId']);
         return false;
     }
 
     $requestData = json_decode($logData['request_body'], true);
     $responseData = json_decode($logData['response_body'], true);
     
-    // Vérifier si une URL IPN est définie
+    // Vérifier l'URL IPN
     if (empty($requestData['ipnURL'])) {
+        error_log("Pas d'ipnURL trouvée pour TransId: " . $transactionData['TransId']);
         return false;
     }
 
+    error_log("IPN URL trouvée: " . $requestData['ipnURL']);
+    
     // Préparer les données de notification
     $notificationData = [
         'event' => 'payment.completed',
@@ -57,8 +64,17 @@ function sendIpnNotification($transactionData) {
         CURLOPT_TIMEOUT => 10
     ]);
 
+    // Log de la tentative d'envoi
+    error_log("Tentative d'envoi IPN à " . $requestData['ipnURL']);
+    error_log("Données envoyées: " . json_encode($notificationData));
+    
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    // Log de la réponse
+    error_log("Réponse IPN - Code HTTP: " . $httpCode);
+    error_log("Réponse IPN - Contenu: " . $response);
+    
     curl_close($ch);
 
     // Enregistrer la tentative de notification

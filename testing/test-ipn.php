@@ -1,48 +1,49 @@
 <?php
+// Définir le chemin absolu du fichier de log
+define('LOG_FILE', __DIR__ . '/ipn_test_logs.txt');
+
+// Créer le fichier s'il n'existe pas
+if (!file_exists(LOG_FILE)) {
+    touch(LOG_FILE);
+    chmod(LOG_FILE, 0666); // Donner les permissions d'écriture
+}
+
+// Vérifier si le fichier est accessible en écriture
+if (!is_writable(LOG_FILE)) {
+    error_log('Le fichier de log IPN n\'est pas accessible en écriture: ' . LOG_FILE);
+}
+
 // Activer l'affichage des erreurs pour le debug
 ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Créer un fichier de log
-$logFile = __DIR__ . '/ipn_test_logs.txt';
+// Log initial pour vérifier que le script est appelé
+$initialLog = "=== Script IPN appelé le " . date('Y-m-d H:i:s') . " ===\n";
+file_put_contents(LOG_FILE, $initialLog, FILE_APPEND);
 
 // Récupérer les données brutes
 $rawData = file_get_contents('php://input');
-
-// Récupérer les headers
 $headers = getallheaders();
 
-// Préparer le contenu du log
-$logContent = "=== Nouvelle notification IPN reçue le " . date('Y-m-d H:i:s') . " ===\n";
-$logContent .= "\nHeaders reçus:\n";
-$logContent .= print_r($headers, true);
-$logContent .= "\nDonnées brutes reçues:\n";
-$logContent .= $rawData . "\n";
+// Logger toutes les données reçues
+$logContent = "Headers:\n" . print_r($headers, true) . "\n\n";
+$logContent .= "Raw Data:\n" . $rawData . "\n\n";
+$logContent .= "GET Data:\n" . print_r($_GET, true) . "\n\n";
+$logContent .= "POST Data:\n" . print_r($_POST, true) . "\n\n";
 
-// Si les données sont du JSON, les décoder pour un affichage plus lisible
-if ($rawData) {
-    $decodedData = json_decode($rawData, true);
-    if ($decodedData) {
-        $logContent .= "\nDonnées décodées:\n";
-        $logContent .= print_r($decodedData, true);
-    }
-}
+file_put_contents(LOG_FILE, $logContent, FILE_APPEND);
 
-$logContent .= "\n=== Fin de la notification ===\n\n";
-
-// Enregistrer dans le fichier de log
-file_put_contents($logFile, $logContent, FILE_APPEND);
-
-// Répondre avec un code 200 et les données reçues
+// Répondre avec un code 200
 http_response_code(200);
 header('Content-Type: application/json');
 
-echo json_encode([
+$response = [
     'status' => 'success',
-    'message' => 'IPN notification received and logged',
-    'received_data' => [
-        'headers' => $headers,
-        'body' => $decodedData ?? $rawData
-    ]
-]); 
+    'message' => 'IPN notification received',
+    'timestamp' => date('Y-m-d H:i:s')
+];
+
+echo json_encode($response);
+
+// Logger la réponse
+file_put_contents(LOG_FILE, "Response sent:\n" . json_encode($response) . "\n\n", FILE_APPEND); 
