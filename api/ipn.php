@@ -33,6 +33,39 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
     }
 }
 
+// Vérifier si un IPN a déjà été envoyé avec succès pour cette transaction
+function hasSuccessfulIpnBeenSent($transactionId, $merchantRef) {
+    global $connection;
+    
+    $stmt = $connection->prepare("
+        SELECT il.payload, il.status
+        FROM ipn_logs il
+        WHERE il.transaction_id = ?
+        AND il.status = 'success'
+        AND il.created_at >= NOW() - INTERVAL 5 MINUTE
+        ORDER BY il.created_at DESC
+        LIMIT 1
+    ");
+    $stmt->bind_param("s", $transactionId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($row = $result->fetch_assoc()) {
+        $payload = json_decode($row['payload'], true);
+        // Si on a déjà envoyé un IPN "APPROVED", on n'en renvoie pas d'autre
+        if ($payload['status'] === 'APPROVED') {
+            error_log("IPN précédent trouvé avec statut APPROVED");
+            return true;
+        }
+        // Si le précédent était "DECLINED", on permet un nouvel IPN
+        error_log("IPN précédent trouvé avec statut DECLINED - Permettre un nouvel essai");
+        return false;
+    }
+    
+    error_log("Aucun IPN précédent trouvé");
+    return false;
+}
+
 // Capturer la réponse brute
 $raw_post_data = file_get_contents('php://input');
 error_log("Raw POST data reçue: " . $raw_post_data);
@@ -44,6 +77,16 @@ error_log("Réponse décodée: " . print_r($ovri_response, true));
 if ($ovri_response) {
     // Récupérer la référence de commande
     $merchantRef = $ovri_response['MerchantRef'] ?? null;
+    $transId = $ovri_response['TransId'] ?? null;
+    
+    // Vérifier si un IPN a déjà été envoyé avec succès
+    if ($transId && hasSuccessfulIpnBeenSent($transId, $merchantRef)) {
+        error_log("IPN déjà envoyé avec succès pour la transaction " . $transId . ". Ignoré.");
+        http_response_code(200);
+        echo "OK - Already processed";
+        exit;
+    }
+    
     error_log("MerchantRef extrait: " . ($merchantRef ?? 'null'));
     
     if ($merchantRef) {
