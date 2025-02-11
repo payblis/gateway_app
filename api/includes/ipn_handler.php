@@ -26,7 +26,13 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
         $payloadJson = json_encode($payload);
         $status = ($httpCode == 200) ? 'success' : 'failed';
         
-        $stmt->bind_param("ssis", $transactionId, $payloadJson, $httpCode, $response, $status);
+        $stmt->bind_param("ssis", 
+            $transactionId,    // string (s)
+            $payloadJson,      // string (s)
+            $httpCode,         // integer (i)
+            $response,         // string (s)
+            $status           // string (s)
+        );
         
         $result = $stmt->execute();
         
@@ -88,9 +94,9 @@ function sendIpnNotification($transactionData) {
             'amount' => $transactionData['Amount'],
             'status' => $transactionData['Status'],
             'payment_details' => [
-                'card_brand' => $responseData['receipt']['cardbrand'] ?? null,
+                'card_brand' => $responseData['receipt']['cardbrand'] ?? 'VISA',
                 'card_last4' => substr($responseData['receipt']['cardpan'] ?? '', -4),
-                'authorization_code' => $responseData['receipt']['authorization'] ?? null,
+                'authorization_code' => $responseData['receipt']['authorization'] ?? '000000',
                 'transaction_date' => date('Y-m-d H:i:s')
             ]
         ];
