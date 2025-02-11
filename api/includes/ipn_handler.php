@@ -101,9 +101,31 @@ function sendIpnNotification($transactionData) {
             return false;
         }
         
+        // Déterminer l'événement en fonction du statut
+        $event = 'payment.';
+        switch ($transactionData['Status']) {
+            case 'Success':
+                $event .= 'completed';
+                break;
+            case 'Failed':
+                $event .= 'failed';
+                break;
+            case 'Declined':
+                $event .= 'declined';
+                break;
+            case 'Error':
+                $event .= 'error';
+                break;
+            case 'Pending3DS':
+                $event .= 'pending_3ds';
+                break;
+            default:
+                $event .= 'unknown';
+        }
+        
         // Préparer les données de notification
         $notificationData = [
-            'event' => 'payment.completed',
+            'event' => $event,
             'merchant_reference' => $transactionData['MerchantRef'],
             'transaction_id' => $transactionData['TransId'],
             'amount' => $transactionData['Amount'],
@@ -115,6 +137,21 @@ function sendIpnNotification($transactionData) {
                 'transaction_date' => date('Y-m-d H:i:s')
             ]
         ];
+
+        // Ajouter des détails supplémentaires selon le statut
+        if ($transactionData['Status'] === 'Failed' || $transactionData['Status'] === 'Error') {
+            $notificationData['error'] = [
+                'code' => $responseData['code'] ?? 'unknown',
+                'message' => $responseData['message'] ?? 'Transaction failed'
+            ];
+        }
+
+        if ($transactionData['Status'] === 'Pending3DS') {
+            $notificationData['threeds'] = [
+                'status' => 'pending',
+                'required' => true
+            ];
+        }
         
         error_log("[IPN] Données à envoyer: " . print_r($notificationData, true));
         
@@ -127,7 +164,7 @@ function sendIpnNotification($transactionData) {
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
                 'X-Payblis-Signature: ' . hash_hmac('sha256', json_encode($notificationData), $requestData['MerchantKey']),
-                'X-Payblis-Event: payment.completed'
+                'X-Payblis-Event: ' . $event
             ],
             CURLOPT_TIMEOUT => 10,
             CURLOPT_SSL_VERIFYPEER => false,
