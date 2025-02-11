@@ -2,6 +2,7 @@
 error_log("=== DÉBUT IPN.PHP ===");
 
 require('../admin/include/config.php');
+require('./includes/common_functions.php');
 
 // Fonction de logging dédiée
 function logDebug($message, $data = null) {
@@ -74,13 +75,23 @@ $ovri_response = json_decode($raw_post_data, true);
 error_log("Réponse décodée: " . print_r($ovri_response, true));
 
 if ($ovri_response) {
-    // Récupérer la référence de commande
     $merchantRef = $ovri_response['MerchantRef'] ?? null;
     $transId = $ovri_response['TransId'] ?? null;
     
-    // Vérifier si un IPN a déjà été envoyé avec succès
-    if ($transId && hasSuccessfulIpnBeenSent($transId, $merchantRef)) {
-        error_log("IPN déjà envoyé avec succès pour la transaction " . $transId . ". Ignoré.");
+    // Vérifier si cette transaction a déjà été traitée
+    $stmt = $connection->prepare("
+        SELECT COUNT(*) as count 
+        FROM ovri_logs 
+        WHERE transaction_id = ? 
+        AND created_at >= NOW() - INTERVAL 1 MINUTE
+    ");
+    $stmt->bind_param("s", $transId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    
+    if ($row['count'] > 0) {
+        error_log("Transaction déjà traitée dans la dernière minute: " . $transId);
         http_response_code(200);
         echo "OK - Already processed";
         exit;

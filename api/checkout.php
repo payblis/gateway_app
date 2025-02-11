@@ -129,16 +129,13 @@ if ($resultDecode['code'] == 'success') {
     $status = "paid";
     $stmt->bind_param("si", $status, $inserted_id);
     $stmt->execute();
-
-    // Décoder les données utilisateur pour obtenir ipnURL et MerchantKey
-    $decodedData = unserialize(urldecode($userdata));
     
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Success");
     $ipnData = [
         'TransId' => $resultDecode['TransactionId'],
         'MerchantRef' => $RefOrder,
         'Amount' => $amount,
-        'Status' => 'Success',
+        'Status' => '2', // Pour correspondre au format OVRI
         'ipnURL' => $decodedData['ipnURL'] ?? null,
         'MerchantKey' => $decodedData['MerchantKey'] ?? null
     ];
@@ -151,16 +148,11 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    // Avant la redirection vers OVRI
-    logOvriFlow('pre_redirect_ovri', [
-        'url' => $urlOK ?? 'No URL',
-        'params' => [],
-        'headers' => getallheaders(),
-        'session' => $_SESSION ?? [],
-        'method' => $_SERVER['REQUEST_METHOD']
-    ]);
-
-    header('Location: ' . $urlOK);
+    // Redirection vers l'URL du marchand directement
+    if (isset($decodedData['urlOK'])) {
+        header('Location: ' . $decodedData['urlOK']);
+        exit;
+    }
 } elseif ($resultDecode['code'] == '000006') {
     $http_code = 402;
     updatelogs($MyVars, $resultDecode, $http_code);
