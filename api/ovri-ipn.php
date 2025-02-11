@@ -77,15 +77,16 @@ if ($ovri_response) {
             }
             
             if ($merchantIpnUrl) {
-                // Préparer les données pour le marchand
+                // Reformater l'ID de transaction (supprimer "OVRI-" et tout ce qui suit le premier tiret)
+                $originalTransId = $ovri_response['TransId'] ?? '';
+                $formattedTransId = preg_replace('/^OVRI-(\d+).*$/', '$1', $originalTransId);
+                
+                // Préparer les données pour le marchand avec un format simplifié
                 $ipnData = [
-                    'TransId' => $ovri_response['TransId'] ?? null,
-                    'MerchantRef' => $merchantRef,
-                    'Amount' => $ovri_response['Amount'] ?? null,
-                    'Status' => $ovri_response['Status'] ?? null,
-                    'CardType' => $ovri_response['CardType'] ?? null,
-                    'CardNumber' => $ovri_response['CardNumber'] ?? null,
-                    'BankTrxID' => $ovri_response['BankTrxID'] ?? null
+                    'code' => 'success',
+                    'status' => $ovri_response['Status'] === '2' ? 'APPROVED' : 'DECLINED',
+                    'TransactionId' => $formattedTransId,
+                    'RefOrder' => $merchantRef
                 ];
                 
                 error_log("Données à envoyer au marchand: " . print_r($ipnData, true));
