@@ -10,18 +10,18 @@ function updatelogs($reqbody, $resbody, $http_code)
 {
     global $connection;
 
-    // Assuming 'TransactionId' is a key in $resbody
-    $transaction_id = $resbody['TransactionId'] ?? $resbody['transactionId'] ?? null;
     $request_type = 'via card';
     $request_body = json_encode($reqbody);
     $response_body = json_encode($resbody);
     $usertoken = $reqbody['MerchantKey'];
+    $transaction_id = $resbody['TransactionId'] ?? null;
 
-    // Mettre à jour la ligne existante au lieu d'en créer une nouvelle
+    // Mettre à jour la ligne existante avec le transaction_id
     $stmt = $connection->prepare("UPDATE `ovri_logs` 
                                 SET request_body = ?,
                                     response_body = ?,
-                                    http_code = ?
+                                    http_code = ?,
+                                    transaction_id = ?
                                 WHERE token = ? 
                                 ORDER BY created_at DESC 
                                 LIMIT 1");
@@ -31,10 +31,11 @@ function updatelogs($reqbody, $resbody, $http_code)
     }
 
     // Bind parameters to the prepared statement
-    $stmt->bind_param("ssis", 
+    $stmt->bind_param("ssiss", 
         $request_body,
         $response_body,
         $http_code,
+        $transaction_id,
         $usertoken
     );
 
