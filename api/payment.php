@@ -43,7 +43,8 @@ $requiredFields = [
     'lang',
     'urlOK',
     'urlKO',
-    'ipnURL'
+    'ipnURL',
+    'store_name'
 ];
 
 $missingFields = [];
@@ -165,7 +166,7 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
 
             <div class="card-header d-flex align-items-center flex-column">
                 <img src="../assets/images/logo.jpeg" alt="Payblis Logo" width="100px">
-                <span>Store name : (Soon)</span>
+                <span>Store name : <?php echo htmlspecialchars($MyVars['store_name']) ?></span>
                 <span>Order ID : <?php echo $MyVars['RefOrder'] ?></span>
                 <h6 class="mt-3"><?php echo  $MyVars['amount'] ?> EUR</h6>
             </div>
