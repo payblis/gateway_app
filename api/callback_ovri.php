@@ -80,23 +80,47 @@ try {
         } else {
             logCallback("Statut de la transaction mis à jour: " . $newStatus . " pour ref_order: " . $rawData['MerchantRef']);
             
-            // Si le paiement est confirmé (status 2 = paid), déclencher l'IPN vers le marchand
-            if ($newStatus === 'paid') {
-                // Récupérer les données complètes de la transaction
-                $transQuery = "SELECT * FROM transactions WHERE ref_order = ?";
-                $transStmt = $connection->prepare($transQuery);
-                $transStmt->bind_param("s", $rawData['MerchantRef']);
-                $transStmt->execute();
-                $transResult = $transStmt->get_result();
+            // Récupérer les données complètes de la transaction, y compris l'URL IPN
+            $transQuery = "SELECT t.*, o.request_body 
+                         FROM transactions t 
+                         LEFT JOIN ovri_logs o ON o.ref_order = t.ref_order 
+                         WHERE t.ref_order = ? 
+                         ORDER BY o.created_at DESC 
+                         LIMIT 1";
+            
+            $transStmt = $connection->prepare($transQuery);
+            if (!$transStmt) {
+                logCallback("Erreur préparation requête: " . $connection->error);
+                return;
+            }
+            
+            $transStmt->bind_param("s", $rawData['MerchantRef']);
+            $transStmt->execute();
+            $transResult = $transStmt->get_result();
+            
+            if ($transData = $transResult->fetch_assoc()) {
+                logCallback("Données transaction trouvées");
                 
-                if ($transData = $transResult->fetch_assoc()) {
-                    logCallback("Envoi de l'IPN pour transaction réussie");
+                // Décoder le request_body pour récupérer l'URL IPN
+                $requestData = json_decode($transData['request_body'], true);
+                if ($requestData && isset($requestData['ipnURL'])) {
+                    // Ajouter l'URL IPN aux données de transaction
+                    $transData['ipnURL'] = $requestData['ipnURL'];
+                    
                     // Ajouter les données supplémentaires d'Ovri
                     $transData['TransId'] = $rawData['TransId'];
                     $transData['CardType'] = $rawData['CardType'];
                     $transData['CardNumber'] = $rawData['CardNumber'];
-                    sendIpnNotification($transData);
+                    $transData['Status'] = $newStatus;
+                    
+                    logCallback("Envoi de l'IPN avec les données:", $transData);
+                    $ipnResult = sendIpnNotification($transData);
+                    logCallback("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
+                } else {
+                    logCallback("URL IPN non trouvée dans les données de la transaction");
                 }
+            } else {
+                logCallback("Transaction non trouvée pour ref_order: " . $rawData['MerchantRef']);
             }
         }
     }
