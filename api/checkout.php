@@ -133,24 +133,8 @@ $resultDecode = json_decode($result, true);
 if ($resultDecode['code'] == 'success') {
     $http_code = 200;
     
-    // Mise à jour de ovri_logs
-    $updateQuery = "UPDATE ovri_logs 
-                   SET response_body = ?,
-                       http_code = ?
-                   WHERE token = ? 
-                   ORDER BY created_at DESC 
-                   LIMIT 1";
-              
-    $stmt = $connection->prepare($updateQuery);
-    $response_json = json_encode($resultDecode);
-    
-    $stmt->bind_param("sis", 
-        $response_json,
-        $http_code,
-        $MyVars['MerchantKey']
-    );
-    
-    $stmt->execute();
+    // Remplacer le bloc de mise à jour direct par l'appel à updatelogs()
+    updatelogs($MyVars, $resultDecode, $http_code);
 
     // Mise à jour du statut de la transaction
     $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
