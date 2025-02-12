@@ -11,6 +11,7 @@ $MyVars = array(
     'country' => 'France', // Customer's country
     'userIP' => '192.168.1.1', // Customer's IP
     'lang' => 'en', // Language
+    'store_name' => 'Example Store',
     'urlOK' => 'https://testmarchant.com/success.php',
     'urlKO' => 'https://testmarchant.com/failed.php',
     'ipnURL' => 'https://pay.payblis.com/testing/test-ipn.php'
