@@ -101,8 +101,8 @@ function insertTrans($reqbody)
     }
 
     global $connection;
-    $stmt = $connection->prepare("INSERT INTO transactions (name, email, ref_order, first_name, amount, country, status, token) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?,?)");
+    $stmt = $connection->prepare("INSERT INTO transactions (name, email, ref_order, first_name, amount, country, store_name, status, token) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     $token = $reqbody['MerchantKey'];
     $amount = $reqbody['amount'];
@@ -111,9 +111,10 @@ function insertTrans($reqbody)
     $first_name = $reqbody['Customer_FirstName'];
     $country = $reqbody['country'];
     $ref_order = $reqbody['RefOrder'];
+    $store_name = $reqbody['store_name'];
     $status = 'pending';
 
-    $stmt->bind_param("ssssdsss", $name, $email, $ref_order, $first_name, $amount, $country, $status, $token);
+    $stmt->bind_param("ssssdssss", $name, $email, $ref_order, $first_name, $amount, $country, $store_name, $status, $token);
 
     if ($stmt->execute()) {
         $inserted_id = $stmt->insert_id;

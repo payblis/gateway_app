@@ -24,6 +24,7 @@ if ($result) {
                                 <th scope="col">Email</th>
                                 <th scope="col">Amount</th>
                                 <th scope="col">Country</th>
+                                <th scope="col">Store Name</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Transaction Date</th>
                             </tr>
@@ -75,6 +76,11 @@ if ($result) {
                 <td>
                     <div class="d-flex align-items-center">
                         <h6 class="text-md mb-0 fw-medium flex-grow-1">' . $row["country"] . '</h6>
+                    </div>
+                </td>
+                <td>
+                    <div class="d-flex align-items-center">
+                        <h6 class="text-md mb-0 fw-medium flex-grow-1">' . $row["store_name"] . '</h6>
                     </div>
                 </td>
                 <td>
