@@ -53,8 +53,18 @@ try {
         logCallback("Erreur lors de l'enregistrement en BD: " . $stmt->error);
     }
 
-    // 6. Traiter le statut (exemple basique - à adapter selon la structure exacte d'Ovri)
+    // 6. Traiter le statut
     if (isset($rawData['Status'])) {
+        logCallback("Traitement du statut: " . $rawData['Status']);
+        
+        // Convertir le status Ovri en status interne
+        $newStatus = 'PENDING'; // Statut par défaut
+        if ($rawData['Status'] == '2') {
+            $newStatus = 'SUCCESS';
+        } elseif ($rawData['Status'] == '6') {
+            $newStatus = 'PENDING3DS';
+        }
+        
         // Mettre à jour le statut de la transaction
         $updateQuery = "UPDATE transactions 
                        SET status = ?, 
@@ -62,25 +72,26 @@ try {
                        WHERE transaction_id = ?";
         
         $updateStmt = $connection->prepare($updateQuery);
-        $status = $rawData['Status'];
-        $updateStmt->bind_param("ss", $status, $transactionId);
+        $updateStmt->bind_param("ss", $newStatus, $transactionId);
         
         if (!$updateStmt->execute()) {
             logCallback("Erreur lors de la mise à jour du statut: " . $updateStmt->error);
-        }
-
-        // Si le paiement est confirmé, déclencher l'IPN vers le marchand
-        if (in_array($status, ['SUCCESS', 'AUTHORIZED'])) {
-            // Récupérer les données complètes de la transaction
-            $transQuery = "SELECT * FROM transactions WHERE transaction_id = ?";
-            $transStmt = $connection->prepare($transQuery);
-            $transStmt->bind_param("s", $transactionId);
-            $transStmt->execute();
-            $transResult = $transStmt->get_result();
+        } else {
+            logCallback("Statut de la transaction mis à jour: " . $newStatus);
             
-            if ($transData = $transResult->fetch_assoc()) {
-                // Envoyer l'IPN au marchand
-                sendIpnNotification($transData);
+            // Si le paiement est confirmé (status 2), déclencher l'IPN vers le marchand
+            if ($newStatus === 'SUCCESS') {
+                // Récupérer les données complètes de la transaction
+                $transQuery = "SELECT * FROM transactions WHERE transaction_id = ?";
+                $transStmt = $connection->prepare($transQuery);
+                $transStmt->bind_param("s", $transactionId);
+                $transStmt->execute();
+                $transResult = $transStmt->get_result();
+                
+                if ($transData = $transResult->fetch_assoc()) {
+                    logCallback("Envoi de l'IPN pour transaction réussie");
+                    sendIpnNotification($transData);
+                }
             }
         }
     }
