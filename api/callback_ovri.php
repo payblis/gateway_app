@@ -58,18 +58,20 @@ try {
     // 5. Mettre à jour ovri_logs avec la réponse
     $updateQuery = "UPDATE ovri_logs 
                    SET response_body = ?
-                   WHERE transaction_id = ?";
+                   WHERE transaction_id = ?
+                   ORDER BY created_at DESC 
+                   LIMIT 1";
               
     $stmt = $connection->prepare($updateQuery);
     $stmt->bind_param("ss", 
         $rawInput,
-        $rawData['TransId']  // Utilisation du TransId d'Ovri
+        $rawData['MerchantRef']  // Utilisation du MerchantRef qui correspond à notre ref_order
     );
     
     if (!$stmt->execute()) {
         logCallback("Erreur lors de la mise à jour d'ovri_logs: " . $stmt->error);
     } else {
-        logCallback("ovri_logs mis à jour avec succès pour TransId: " . $rawData['TransId']);
+        logCallback("ovri_logs mis à jour avec succès pour ref_order: " . $rawData['MerchantRef']);
     }
 
     // 6. Répondre à Ovri
