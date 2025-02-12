@@ -10,22 +10,34 @@ function updatelogs($reqbody, $resbody, $http_code)
 {
     global $connection;
 
-    // Assuming 'TransactionId' is a key in $resbody
-     $transaction_id = $resbody['TransactionId'] ?? $resbody['transactionId'] ?? null;
-
     $request_type = 'via card';
     $request_body = json_encode($reqbody);
-    $response_body = json_encode($resbody); // Now properly encoding response body
+    $response_body = json_encode($resbody);
     $usertoken = $reqbody['MerchantKey'];
+    $transaction_id = $resbody['TransactionId'] ?? null;
 
-    // Prepare the query to avoid SQL injection
-    $stmt = $connection->prepare("INSERT INTO `ovri_logs` (`transaction_id`, `request_type`, `request_body`, `response_body`, `http_code`, `token`) VALUES (?, ?, ?, ?, ?, ?)");
+    // Mettre à jour la ligne existante avec le transaction_id
+    $stmt = $connection->prepare("UPDATE `ovri_logs` 
+                                SET request_body = ?,
+                                    response_body = ?,
+                                    http_code = ?,
+                                    transaction_id = ?
+                                WHERE token = ? 
+                                ORDER BY created_at DESC 
+                                LIMIT 1");
+    
     if ($stmt === false) {
         die("Failed to prepare query.");
     }
 
     // Bind parameters to the prepared statement
-    $stmt->bind_param("ssssss", $transaction_id, $request_type, $request_body, $response_body, $http_code, $usertoken);
+    $stmt->bind_param("ssiss", 
+        $request_body,
+        $response_body,
+        $http_code,
+        $transaction_id,
+        $usertoken
+    );
 
     // Execute the query
     $stmt->execute();
@@ -75,7 +87,7 @@ $myrequest = array(
     'edYear' => $expYear,
     'cvv' => $CVN,
     'customerIP' => $UserIP,
-    'urlIPN' => 'https://www.example.com/ipn',
+    'urlIPN' => 'https://pay.payblis.com/api/callback_ovri.php',
     'urlOK' => 'https://pay.payblis.com/api/success.php',
     'urlKO' => 'https://pay.payblis.com/api/failed.php',
     'browserUserAgent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -120,8 +132,11 @@ $resultDecode = json_decode($result, true);
 // Handle the result
 if ($resultDecode['code'] == 'success') {
     $http_code = 200;
+    
+    // Remplacer le bloc de mise à jour direct par l'appel à updatelogs()
     updatelogs($MyVars, $resultDecode, $http_code);
 
+    // Mise à jour du statut de la transaction
     $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
     $status = "paid";
     $stmt->bind_param("si", $status, $inserted_id);
