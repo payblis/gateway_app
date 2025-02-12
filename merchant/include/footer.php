@@ -4,9 +4,6 @@
     <div class="col-auto">
       <p class="mb-0">© 2025 Payblis. All Rights Reserved.</p>
     </div>
-    <div class="col-auto">
-      <p class="mb-0">Developed by <span class="text-primary-600"><a target="_blank" href="https://fronxsolutions.com/"> Fronx Solutions</a></span></p>
-    </div>
   </div>
 </footer>
 </main>
