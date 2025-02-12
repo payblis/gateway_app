@@ -81,7 +81,7 @@ function sendIpnNotification($transactionData) {
             return false;
         }
         
-        $stmt->bind_param("s", $transactionData['MerchantRef']);
+        $stmt->bind_param("s", $transactionData['TransId']);
         $stmt->execute();
         $result = $stmt->get_result();
         
