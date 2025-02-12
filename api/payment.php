@@ -165,9 +165,9 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
 
             <div class="card-header d-flex align-items-center flex-column">
                 <img src="../assets/images/logo.jpeg" alt="Payblis Logo" width="100px">
+                <span>Store name : (Soon)</span>
+                <span>Order ID : <?php echo $MyVars['RefOrder'] ?></span>
                 <h6 class="mt-3"><?php echo  $MyVars['amount'] ?> EUR</h6>
-                <h6><?php echo  $MyVars['Customer_Name'] ?></h6>
-                <span>Ref <?php echo $MyVars['RefOrder'] ?></span>
             </div>
             <!-- <div class="divider">Pay by card Visa or Mastercard</div> -->
 
