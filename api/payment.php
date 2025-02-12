@@ -36,7 +36,6 @@ $requiredFields = [
     'amount',
     'RefOrder',
     'Customer_Email',
-    'Customer_Phone',
     'Customer_Name',
     'Customer_FirstName',
     'country',
