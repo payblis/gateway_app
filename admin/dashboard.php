@@ -98,7 +98,7 @@ $failedAmount = mysqli_fetch_assoc($failedAmountQuery)['totalFailed'] ?? 0;
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
               <div>
                 <p class="fw-medium text-primary-light mb-1">Paid Amount</p>
-                <h6 class="mb-0">$<?php echo $paidAmount?></h6>
+                <h6 class="mb-0">€<?php echo $paidAmount?></h6>
               </div>
               <div class="w-50-px h-50-px bg-purple rounded-circle d-flex justify-content-center align-items-center">
                 <iconify-icon icon="fa-solid:award" class="text-white text-2xl mb-0"></iconify-icon>
@@ -114,7 +114,7 @@ $failedAmount = mysqli_fetch_assoc($failedAmountQuery)['totalFailed'] ?? 0;
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
               <div>
                 <p class="fw-medium text-primary-light mb-1">Pending Amount</p>
-                <h6 class="mb-0">$<?php echo $pendingAmount?></h6>
+                <h6 class="mb-0">€<?php echo $pendingAmount?></h6>
               </div>
               <div class="w-50-px h-50-px bg-info rounded-circle d-flex justify-content-center align-items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" viewBox="0 0 50 50" id="pending" fill="#ffffff">
@@ -134,7 +134,7 @@ $failedAmount = mysqli_fetch_assoc($failedAmountQuery)['totalFailed'] ?? 0;
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
               <div>
                 <p class="fw-medium text-primary-light mb-1">Failed Amount</p>
-                <h6 class="mb-0">$<?php echo $failedAmount?></h6>
+                <h6 class="mb-0">€<?php echo $failedAmount?></h6>
               </div>
               <div class="w-50-px h-50-px bg-red rounded-circle d-flex justify-content-center align-items-center">
                 <iconify-icon icon="fa6-solid:file-invoice-dollar" class="text-white text-2xl mb-0"></iconify-icon>
