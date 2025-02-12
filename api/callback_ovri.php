@@ -58,18 +58,23 @@ try {
     // 5. Mettre à jour ovri_logs avec la réponse
     $updateQuery = "UPDATE ovri_logs 
                    SET response_body = ?
-                   WHERE transaction_id = ?";
+                   WHERE response_body LIKE ? OR response_body LIKE ?";
               
     $stmt = $connection->prepare($updateQuery);
-    $stmt->bind_param("ss", 
-        $rawInput,                // La réponse complète d'Ovri
-        $rawData['TransId']       // L'ID de transaction Ovri (ex: OVRI-20250212095333-67ac618db52ec)
+    $searchPattern1 = '%"transactionId":"' . $rawData['TransId'] . '"%';  // Format dans la première réponse
+    $searchPattern2 = '%"TransId":"' . $rawData['TransId'] . '"%';        // Format dans le callback
+    
+    $stmt->bind_param("sss", 
+        $rawInput,      // La réponse complète d'Ovri
+        $searchPattern1, // Recherche avec "transactionId"
+        $searchPattern2  // Recherche avec "TransId"
     );
     
     if (!$stmt->execute()) {
         logCallback("Erreur lors de la mise à jour d'ovri_logs: " . $stmt->error);
     } else {
         logCallback("ovri_logs mis à jour avec succès pour TransId: " . $rawData['TransId']);
+        logCallback("Patterns de recherche utilisés:", ["pattern1" => $searchPattern1, "pattern2" => $searchPattern2]);
     }
 
     // 6. Répondre à Ovri
