@@ -36,8 +36,6 @@ function logIpnAttempt($transactionId, $payload, $httpCode, $response) {
         error_log("[IPN] - response: " . $response);
         error_log("[IPN] - status: " . $status);
         
-        // bind_param avec seulement les champs nécessaires
-        // s = string, i = integer, s = string, s = string, s = string (status)
         if (!$stmt->bind_param("ssiss", 
             $transactionId,
             $payloadJson,
@@ -152,8 +150,8 @@ function sendIpnNotification($transactionData) {
         
         curl_close($ch);
         
-        // Enregistrer la tentative
-        logIpnAttempt($transactionData['MerchantRef'], $notificationData, $httpCode, $response);
+        // Enregistrer la tentative avec le TransId d'Ovri
+        logIpnAttempt($transactionData['TransId'], $notificationData, $httpCode, $response);
         
         return $httpCode === 200;
         
