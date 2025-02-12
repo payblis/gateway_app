@@ -81,9 +81,9 @@ try {
             logCallback("Statut de la transaction mis à jour: " . $newStatus . " pour ref_order: " . $rawData['MerchantRef']);
             
             // Récupérer les données complètes de la transaction, y compris l'URL IPN
-            $transQuery = "SELECT t.*, o.request_body 
+            $transQuery = "SELECT t.*, o.request_body, o.response_body 
                          FROM transactions t 
-                         LEFT JOIN ovri_logs o ON o.ref_order = t.ref_order 
+                         LEFT JOIN ovri_logs o ON o.transaction_id = t.ref_order 
                          WHERE t.ref_order = ? 
                          ORDER BY o.created_at DESC 
                          LIMIT 1";
@@ -95,18 +95,30 @@ try {
             }
             
             $transStmt->bind_param("s", $rawData['MerchantRef']);
-            $transStmt->execute();
+            
+            if (!$transStmt->execute()) {
+                logCallback("Erreur exécution requête: " . $transStmt->error);
+                return;
+            }
+            
             $transResult = $transStmt->get_result();
             
             if ($transData = $transResult->fetch_assoc()) {
                 logCallback("Données transaction trouvées");
                 
-                // Décoder le request_body pour récupérer l'URL IPN
-                $requestData = json_decode($transData['request_body'], true);
+                // Essayer de récupérer l'URL IPN depuis request_body
+                $requestData = @json_decode($transData['request_body'], true);
                 if ($requestData && isset($requestData['ipnURL'])) {
-                    // Ajouter l'URL IPN aux données de transaction
                     $transData['ipnURL'] = $requestData['ipnURL'];
-                    
+                } else {
+                    // Si pas dans request_body, essayer de décoder la chaîne URL-encoded
+                    $arrayData = @unserialize(urldecode($requestData['array'] ?? ''));
+                    if ($arrayData && isset($arrayData['ipnURL'])) {
+                        $transData['ipnURL'] = $arrayData['ipnURL'];
+                    }
+                }
+                
+                if (isset($transData['ipnURL'])) {
                     // Ajouter les données supplémentaires d'Ovri
                     $transData['TransId'] = $rawData['TransId'];
                     $transData['CardType'] = $rawData['CardType'];
