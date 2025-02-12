@@ -55,24 +55,21 @@ try {
         }
     }
 
-    // 5. Stocker le callback dans ovri_logs
-    $query = "INSERT INTO ovri_logs 
-              (transaction_id, request_type, request_body, response_body, http_code, token) 
-              VALUES (?, '3DS_CALLBACK', ?, ?, 200, ?)";
+    // 5. Mettre à jour ovri_logs avec la réponse
+    $updateQuery = "UPDATE ovri_logs 
+                   SET response_body = ?
+                   WHERE transaction_id = ?";
               
-    $stmt = $connection->prepare($query);
-    $headersJson = json_encode($headers);
-    $token = $rawData['token'] ?? '';
-    
-    $stmt->bind_param("ssss", 
-        $rawData['MerchantRef'],
-        $headersJson,
+    $stmt = $connection->prepare($updateQuery);
+    $stmt->bind_param("ss", 
         $rawInput,
-        $token
+        $rawData['TransId']  // Utilisation du TransId d'Ovri
     );
     
     if (!$stmt->execute()) {
-        logCallback("Erreur lors de l'enregistrement du callback: " . $stmt->error);
+        logCallback("Erreur lors de la mise à jour d'ovri_logs: " . $stmt->error);
+    } else {
+        logCallback("ovri_logs mis à jour avec succès pour TransId: " . $rawData['TransId']);
     }
 
     // 6. Répondre à Ovri
