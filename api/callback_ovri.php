@@ -57,39 +57,44 @@ try {
     if (isset($rawData['Status'])) {
         logCallback("Traitement du statut: " . $rawData['Status']);
         
-        // Convertir le status Ovri en status interne
-        $newStatus = 'PENDING'; // Statut par défaut
+        // Convertir le status Ovri en status de notre table
+        $newStatus = 'pending'; // Statut par défaut
         if ($rawData['Status'] == '2') {
-            $newStatus = 'SUCCESS';
+            $newStatus = 'paid';
         } elseif ($rawData['Status'] == '6') {
-            $newStatus = 'PENDING3DS';
+            $newStatus = 'pending'; // Pour 3DS
+        } elseif ($rawData['Status'] == '3') {
+            $newStatus = 'failed';
         }
         
         // Mettre à jour le statut de la transaction
         $updateQuery = "UPDATE transactions 
-                       SET status = ?, 
-                           updated_at = NOW() 
-                       WHERE transaction_id = ?";
+                       SET status = ?
+                       WHERE ref_order = ?";
         
         $updateStmt = $connection->prepare($updateQuery);
-        $updateStmt->bind_param("ss", $newStatus, $transactionId);
+        $updateStmt->bind_param("ss", $newStatus, $rawData['MerchantRef']);
         
         if (!$updateStmt->execute()) {
             logCallback("Erreur lors de la mise à jour du statut: " . $updateStmt->error);
         } else {
-            logCallback("Statut de la transaction mis à jour: " . $newStatus);
+            logCallback("Statut de la transaction mis à jour: " . $newStatus . " pour ref_order: " . $rawData['MerchantRef']);
             
-            // Si le paiement est confirmé (status 2), déclencher l'IPN vers le marchand
-            if ($newStatus === 'SUCCESS') {
+            // Si le paiement est confirmé (status 2 = paid), déclencher l'IPN vers le marchand
+            if ($newStatus === 'paid') {
                 // Récupérer les données complètes de la transaction
-                $transQuery = "SELECT * FROM transactions WHERE transaction_id = ?";
+                $transQuery = "SELECT * FROM transactions WHERE ref_order = ?";
                 $transStmt = $connection->prepare($transQuery);
-                $transStmt->bind_param("s", $transactionId);
+                $transStmt->bind_param("s", $rawData['MerchantRef']);
                 $transStmt->execute();
                 $transResult = $transStmt->get_result();
                 
                 if ($transData = $transResult->fetch_assoc()) {
                     logCallback("Envoi de l'IPN pour transaction réussie");
+                    // Ajouter les données supplémentaires d'Ovri
+                    $transData['TransId'] = $rawData['TransId'];
+                    $transData['CardType'] = $rawData['CardType'];
+                    $transData['CardNumber'] = $rawData['CardNumber'];
                     sendIpnNotification($transData);
                 }
             }
