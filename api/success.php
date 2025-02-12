@@ -33,50 +33,37 @@ if ($TransId) {
         $logData = $result->fetch_assoc();
         $requestData = json_decode($logData['request_body'], true);
         
-        // Récupérer MerchantRef et Amount depuis les données stockées
+        // Récupérer les données nécessaires
         $MerchantRef = $requestData['RefOrder'] ?? null;
         $amount = $requestData['amount'] ?? null;
+        $ipnURL = $requestData['ipnURL'] ?? null;
+        $urlOK = $requestData['urlOK'] ?? null;
+        $merchantKey = $requestData['MerchantKey'] ?? null;
         
         error_log("MerchantRef: " . $MerchantRef);
         error_log("Amount: " . $amount);
+        error_log("IPN URL: " . $ipnURL);
+        error_log("URL OK: " . $urlOK);
         
         if ($MerchantRef) {
-            // Mettre à jour le statut dans transactions
-            $updateQuery = "UPDATE transactions SET status = 'paid' WHERE ref_order = ?";
-            $updateStmt = $connection->prepare($updateQuery);
-            $updateStmt->bind_param("s", $MerchantRef);
-            $updateStmt->execute();
-            error_log("Statut mis à jour dans transactions");
-            
             // Préparer les données pour l'IPN
-            $transactionData = [
+            $ipnData = [
                 'MerchantRef' => $MerchantRef,
                 'Amount' => $amount,
                 'TransId' => $TransId,
-                'Status' => $Status
+                'Status' => 'Success',
+                'ipnURL' => $ipnURL,
+                'MerchantKey' => $merchantKey
             ];
             
-            error_log("Données IPN préparées: " . print_r($transactionData, true));
+            // Envoyer l'IPN en utilisant la fonction existante
+            $ipnResult = sendIpnNotification($ipnData);
+            error_log("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
             
-            // Appeler sendIpnNotification
-            try {
-                error_log("Tentative d'envoi IPN");
-                $ipnResult = sendIpnNotification($transactionData);
-                error_log("Résultat IPN: " . ($ipnResult ? "Succès" : "Échec"));
-            } catch (Exception $e) {
-                error_log("Erreur IPN: " . $e->getMessage());
-            }
-            
-            // Redirection
-            if (isset($requestData['urlOK'])) {
-                $redirectUrl = $requestData['urlOK'] . 
-                             '?MerchantRef=' . urlencode($MerchantRef) . 
-                             '&Amount=' . urlencode($amount) . 
-                             '&TransId=' . urlencode($TransId) . 
-                             '&Status=Success';
-                
-                error_log("Redirection vers: " . $redirectUrl);
-                header('Location: ' . $redirectUrl);
+            // Redirection finale vers l'URL du marchand
+            if ($urlOK) {
+                error_log("Redirection vers l'URL du marchand: " . $urlOK);
+                header('Location: ' . $urlOK);
                 exit;
             }
         }
