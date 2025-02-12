@@ -132,8 +132,32 @@ $resultDecode = json_decode($result, true);
 // Handle the result
 if ($resultDecode['code'] == 'success') {
     $http_code = 200;
-    updatelogs($MyVars, $resultDecode, $http_code);
+    
+    // Récupération du TransactionId (peut être nommé TransId ou transactionId)
+    $transaction_id = $resultDecode['TransId'] ?? $resultDecode['transactionId'] ?? null;
+    
+    // Mise à jour de ovri_logs avec le transaction_id
+    $updateQuery = "UPDATE ovri_logs 
+                   SET response_body = ?,
+                       http_code = ?,
+                       transaction_id = ?
+                   WHERE token = ? 
+                   ORDER BY created_at DESC 
+                   LIMIT 1";
+              
+    $stmt = $connection->prepare($updateQuery);
+    $response_json = json_encode($resultDecode);
+    
+    $stmt->bind_param("siss", 
+        $response_json,
+        $http_code,
+        $transaction_id,  // Utilisation de la valeur trouvée
+        $MyVars['MerchantKey']
+    );
+    
+    $stmt->execute();
 
+    // Mise à jour du statut de la transaction
     $stmt = $connection->prepare("UPDATE transactions SET status = ? WHERE id = ?");
     $status = "paid";
     $stmt->bind_param("si", $status, $inserted_id);
