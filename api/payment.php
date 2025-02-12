@@ -36,7 +36,6 @@ $requiredFields = [
     'amount',
     'RefOrder',
     'Customer_Email',
-    'Customer_Phone',
     'Customer_Name',
     'Customer_FirstName',
     'country',
@@ -44,7 +43,8 @@ $requiredFields = [
     'lang',
     'urlOK',
     'urlKO',
-    'ipnURL'
+    'ipnURL',
+    'store_name'
 ];
 
 $missingFields = [];
@@ -101,8 +101,8 @@ function insertTrans($reqbody)
     }
 
     global $connection;
-    $stmt = $connection->prepare("INSERT INTO transactions (name, email, ref_order, first_name, amount, country, status, token) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?,?)");
+    $stmt = $connection->prepare("INSERT INTO transactions (name, email, ref_order, first_name, amount, country, store_name, status, token) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     $token = $reqbody['MerchantKey'];
     $amount = $reqbody['amount'];
@@ -111,9 +111,10 @@ function insertTrans($reqbody)
     $first_name = $reqbody['Customer_FirstName'];
     $country = $reqbody['country'];
     $ref_order = $reqbody['RefOrder'];
+    $store_name = $reqbody['store_name'];
     $status = 'pending';
 
-    $stmt->bind_param("ssssdsss", $name, $email, $ref_order, $first_name, $amount, $country, $status, $token);
+    $stmt->bind_param("ssssdssss", $name, $email, $ref_order, $first_name, $amount, $country, $store_name, $status, $token);
 
     if ($stmt->execute()) {
         $inserted_id = $stmt->insert_id;
@@ -166,9 +167,9 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
 
             <div class="card-header d-flex align-items-center flex-column">
                 <img src="../assets/images/logo.jpeg" alt="Payblis Logo" width="100px">
+                <span>Store name : <?php echo htmlspecialchars($MyVars['store_name']) ?></span>
+                <span>Order ID : <?php echo $MyVars['RefOrder'] ?></span>
                 <h6 class="mt-3"><?php echo  $MyVars['amount'] ?> EUR</h6>
-                <h6><?php echo  $MyVars['Customer_Name'] ?></h6>
-                <span>Ref <?php echo $MyVars['RefOrder'] ?></span>
             </div>
             <!-- <div class="divider">Pay by card Visa or Mastercard</div> -->
 
@@ -212,7 +213,6 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
                 <button type="submit" class="btn btn-primary btn-block">Pay <?php echo  $MyVars['amount'] ?> EUR</button>
             </form>
 
-            <!-- <p class="text-center text-muted small mt-3">By submitting this form, you agree to the <a href="#">Privacy Policy</a></p> -->
             <div class="card-footer">
                 <div class="d-flex justify-content-center">
                     <img src="https://pay.payblis.com/wp-content/uploads/2025/01/3d-secure-1.png" class="img-fluid mx-2" width="100px" alt="">

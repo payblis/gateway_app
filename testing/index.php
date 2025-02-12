@@ -1,9 +1,9 @@
 <?php
 // Set up the request parameters
 $MyVars = array(
-    'MerchantKey' => 'lje7XqXlupzgROJRQDmkRyiyhBQXdulb', // Merchant Key
+    'MerchantKey' => 'Wv4vCoTcIDuoKKmcnFGC5hklb5bpeoFK', // Merchant Key
     'amount' => '76.00', // Amount to be paid
-    'RefOrder' => 'ref-456789876567', // Reference Order number (must be unique)
+    'RefOrder' => '456789876567', // Reference Order number (must be unique)
     'Customer_Email' => 'jonathan@test.com', // Customer's email
     'Customer_Phone' => '33123456789123', // Customer's phone number
     'Customer_Name' => 'Jonathan', // Customer's Name
@@ -11,6 +11,7 @@ $MyVars = array(
     'country' => 'France', // Customer's country
     'userIP' => '192.168.1.1', // Customer's IP
     'lang' => 'en', // Language
+    'store_name' => 'Example Store',
     'urlOK' => 'https://testmarchant.com/success.php',
     'urlKO' => 'https://testmarchant.com/failed.php',
     'ipnURL' => 'https://pay.payblis.com/testing/test-ipn.php'

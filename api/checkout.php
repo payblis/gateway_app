@@ -63,7 +63,6 @@ $MerchantKey = $MyVars['MerchantKey'];
 $amount = $MyVars['amount'];
 $RefOrder = $MyVars['RefOrder'];
 $Customer_Email = $MyVars['Customer_Email'];
-$Customer_Phone = $MyVars['Customer_Phone'];
 $Customer_FirstName = $MyVars['Customer_FirstName'];
 $lang = $MyVars['lang'];
 $UserIP = $MyVars['userIP'];
