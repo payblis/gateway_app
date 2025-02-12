@@ -67,13 +67,13 @@ function sendIpnNotification($transactionData) {
     global $connection;
     
     error_log("[IPN] Début sendIpnNotification");
-    error_log("[IPN] Status reçu: " . $transactionData['Status']); // Log pour debug
+    error_log("[IPN] Status reçu: " . $transactionData['Status']);
     
     try {
         // Préparer les données simplifiées
         $notificationData = [
             'status' => (strtolower($transactionData['Status']) === 'success') ? 'APPROVED' : 'DECLINED',
-            'TransactionId' => str_replace('ovri-', '', $transactionData['TransId']),
+            'TransactionId' => preg_replace('/^OVRI-/', '', $transactionData['TransId']),
             'reforder' => $transactionData['MerchantRef']
         ];
 
