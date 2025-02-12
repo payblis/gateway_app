@@ -1,7 +1,7 @@
 <?php
 // Set up the request parameters
 $MyVars = array(
-    'MerchantKey' => 'lje7XqXlupzgROJRQDmkRyiyhBQXdulb', // Merchant Key
+    'MerchantKey' => 'Wv4vCoTcIDuoKKmcnFGC5hklb5bpeoFK', // Merchant Key
     'amount' => '76.00', // Amount to be paid
     'RefOrder' => 'ref-456789876567', // Reference Order number (must be unique)
     'Customer_Email' => 'jonathan@test.com', // Customer's email
