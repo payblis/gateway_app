@@ -3,7 +3,7 @@
 $MyVars = array(
     'MerchantKey' => 'Wv4vCoTcIDuoKKmcnFGC5hklb5bpeoFK', // Merchant Key
     'amount' => '76.00', // Amount to be paid
-    'RefOrder' => 'ref-456789876567', // Reference Order number (must be unique)
+    'RefOrder' => '456789876567', // Reference Order number (must be unique)
     'Customer_Email' => 'jonathan@test.com', // Customer's email
     'Customer_Phone' => '33123456789123', // Customer's phone number
     'Customer_Name' => 'Jonathan', // Customer's Name
