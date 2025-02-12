@@ -55,20 +55,20 @@ try {
         }
     }
 
-    // 5. Mettre à jour ovri_logs avec la réponse et le transaction_id
+    // 5. Mettre à jour ovri_logs avec la réponse
     $updateQuery = "UPDATE ovri_logs 
                    SET response_body = ?,
                        transaction_id = ?
                    WHERE response_body LIKE ? OR response_body LIKE ?";
               
     $stmt = $connection->prepare($updateQuery);
-    $searchPattern1 = '%"transactionId":"' . $rawData['TransId'] . '"%';  // Format dans la première réponse
-    $searchPattern2 = '%"TransId":"' . $rawData['TransId'] . '"%';        // Format dans le callback
+    $searchPattern1 = '%"TransactionId":"' . $rawData['TransId'] . '"%';  // Changé de "transactionId" à "TransactionId"
+    $searchPattern2 = '%"TransId":"' . $rawData['TransId'] . '"%';        
     
     $stmt->bind_param("ssss", 
         $rawInput,       // La réponse complète d'Ovri
         $rawData['TransId'],  // Mise à jour du transaction_id
-        $searchPattern1, // Recherche avec "transactionId"
+        $searchPattern1, // Recherche avec "TransactionId"
         $searchPattern2  // Recherche avec "TransId"
     );
     
