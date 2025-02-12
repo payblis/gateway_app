@@ -97,7 +97,7 @@ $failedAmount = mysqli_fetch_assoc($failedAmountQuery)['totalFailed'] ?? 0;
           <div class="card-body p-20">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
               <div>
-                <p class="fw-medium text-primary-light mb-1">Paid Amount</p>
+                <p class="fw-medium text-primary-light mb-1">Total Amount</p>
                 <h6 class="mb-0">€<?php echo $paidAmount?></h6>
               </div>
               <div class="w-50-px h-50-px bg-purple rounded-circle d-flex justify-content-center align-items-center">
