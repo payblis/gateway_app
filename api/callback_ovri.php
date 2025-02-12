@@ -14,46 +14,19 @@ function logCallback($message, $data = null) {
 try {
     // 1. Récupérer le contenu brut de la requête
     $rawInput = file_get_contents('php://input');
-    logCallback("Callback 3DS reçu - Raw input", $rawInput);
-
-    // 2. Vérifier que c'est bien du JSON
-    if (!$rawData = json_decode($rawInput, true)) {
-        logCallback("Erreur: Données JSON invalides");
-        http_response_code(400);
-        exit('Invalid JSON');
-    }
-
-    // 3. Logger les headers pour debug
     $headers = getallheaders();
+    
+    logCallback("Callback 3DS reçu - Raw input", $rawInput);
     logCallback("Headers reçus", $headers);
 
-    // 4. Logger les données décodées
+    // 2. Décoder les données JSON
+    $rawData = json_decode($rawInput, true);
+    if (!$rawData) {
+        throw new Exception("Impossible de décoder les données JSON");
+    }
     logCallback("Données décodées", $rawData);
 
-    // 5. Enregistrer le callback dans ovri_logs
-    $query = "INSERT INTO ovri_logs 
-              (transaction_id, request_type, request_body, response_body, http_code, token) 
-              VALUES (?, '3DS_CALLBACK', ?, ?, 200, ?)";
-              
-    $stmt = $connection->prepare($query);
-    
-    // Récupérer le transaction_id depuis les données (ajuster selon la structure exacte d'Ovri)
-    $transactionId = $rawData['TransId'] ?? 'UNKNOWN';
-    $headersJson = json_encode($headers);
-    $token = $rawData['token'] ?? ''; // Si Ovri envoie un token dans le callback
-    
-    $stmt->bind_param("ssss", 
-        $transactionId,
-        $headersJson,    // request_body contient les headers pour debug
-        $rawInput,       // response_body contient la réponse JSON d'Ovri
-        $token
-    );
-    
-    if (!$stmt->execute()) {
-        logCallback("Erreur lors de l'enregistrement en BD: " . $stmt->error);
-    }
-
-    // 6. Traiter le statut
+    // 3. Traiter le statut
     if (isset($rawData['Status'])) {
         logCallback("Traitement du statut: " . $rawData['Status']);
         
@@ -67,7 +40,7 @@ try {
             $newStatus = 'failed';
         }
         
-        // Mettre à jour le statut de la transaction
+        // 4. Mettre à jour le statut de la transaction
         $updateQuery = "UPDATE transactions 
                        SET status = ?
                        WHERE ref_order = ?";
@@ -79,65 +52,30 @@ try {
             logCallback("Erreur lors de la mise à jour du statut: " . $updateStmt->error);
         } else {
             logCallback("Statut de la transaction mis à jour: " . $newStatus . " pour ref_order: " . $rawData['MerchantRef']);
-            
-            // Récupérer les données complètes de la transaction, y compris l'URL IPN
-            $transQuery = "SELECT t.*, o.request_body, o.response_body 
-                         FROM transactions t 
-                         LEFT JOIN ovri_logs o ON o.transaction_id = t.ref_order 
-                         WHERE t.ref_order = ? 
-                         ORDER BY o.created_at DESC 
-                         LIMIT 1";
-            
-            $transStmt = $connection->prepare($transQuery);
-            if (!$transStmt) {
-                logCallback("Erreur préparation requête: " . $connection->error);
-                return;
-            }
-            
-            $transStmt->bind_param("s", $rawData['MerchantRef']);
-            
-            if (!$transStmt->execute()) {
-                logCallback("Erreur exécution requête: " . $transStmt->error);
-                return;
-            }
-            
-            $transResult = $transStmt->get_result();
-            
-            if ($transData = $transResult->fetch_assoc()) {
-                logCallback("Données transaction trouvées");
-                
-                // Essayer de récupérer l'URL IPN depuis request_body
-                $requestData = @json_decode($transData['request_body'], true);
-                if ($requestData && isset($requestData['ipnURL'])) {
-                    $transData['ipnURL'] = $requestData['ipnURL'];
-                } else {
-                    // Si pas dans request_body, essayer de décoder la chaîne URL-encoded
-                    $arrayData = @unserialize(urldecode($requestData['array'] ?? ''));
-                    if ($arrayData && isset($arrayData['ipnURL'])) {
-                        $transData['ipnURL'] = $arrayData['ipnURL'];
-                    }
-                }
-                
-                if (isset($transData['ipnURL'])) {
-                    // Ajouter les données supplémentaires d'Ovri
-                    $transData['TransId'] = $rawData['TransId'];
-                    $transData['CardType'] = $rawData['CardType'];
-                    $transData['CardNumber'] = $rawData['CardNumber'];
-                    $transData['Status'] = $newStatus;
-                    
-                    logCallback("Envoi de l'IPN avec les données:", $transData);
-                    $ipnResult = sendIpnNotification($transData);
-                    logCallback("Résultat envoi IPN: " . ($ipnResult ? "Succès" : "Échec"));
-                } else {
-                    logCallback("URL IPN non trouvée dans les données de la transaction");
-                }
-            } else {
-                logCallback("Transaction non trouvée pour ref_order: " . $rawData['MerchantRef']);
-            }
         }
     }
 
-    // 7. Répondre à Ovri
+    // 5. Stocker le callback dans ovri_logs
+    $query = "INSERT INTO ovri_logs 
+              (transaction_id, request_type, request_body, response_body, http_code, token) 
+              VALUES (?, '3DS_CALLBACK', ?, ?, 200, ?)";
+              
+    $stmt = $connection->prepare($query);
+    $headersJson = json_encode($headers);
+    $token = $rawData['token'] ?? '';
+    
+    $stmt->bind_param("ssss", 
+        $rawData['MerchantRef'],
+        $headersJson,
+        $rawInput,
+        $token
+    );
+    
+    if (!$stmt->execute()) {
+        logCallback("Erreur lors de l'enregistrement du callback: " . $stmt->error);
+    }
+
+    // 6. Répondre à Ovri
     http_response_code(200);
     echo json_encode(['status' => 'success']);
 
