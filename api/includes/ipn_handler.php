@@ -72,7 +72,7 @@ function sendIpnNotification($transactionData) {
     try {
         // Préparer les données simplifiées
         $notificationData = [
-            'status' => ($transactionData['Status'] == 'success' || $transactionData['Status'] == 'SUCCESS') ? 'APPROVED' : 'DECLINED',
+            'status' => (strtolower($transactionData['Status']) === 'success') ? 'APPROVED' : 'DECLINED',
             'TransactionId' => str_replace('ovri-', '', $transactionData['TransId']),
             'reforder' => $transactionData['MerchantRef']
         ];
