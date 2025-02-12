@@ -10,14 +10,9 @@ require('./includes/ipn_handler.php');
 error_log("✓ Handler IPN chargé");
 
 // Récupérer les paramètres de l'URL
-$TransId = $_GET['transactionId'] ?? null;
-$Status = $_GET['status'] ?? null;
+$TransId = $_GET['TransId'] ?? null;
+error_log("TransId reçu: " . ($TransId ?? 'non défini'));
 
-error_log("Paramètres extraits:");
-error_log("- TransId: " . ($TransId ?? 'non défini'));
-error_log("- Status: " . ($Status ?? 'non défini'));
-
-// Récupérer les informations de la transaction depuis ovri_logs
 if ($TransId) {
     error_log("🔍 Recherche de la transaction dans ovri_logs pour TransId: " . $TransId);
     $query = "SELECT * FROM ovri_logs WHERE transaction_id = ?";
@@ -29,54 +24,67 @@ if ($TransId) {
     if ($result->num_rows > 0) {
         error_log("✓ Transaction trouvée dans ovri_logs");
         $logData = $result->fetch_assoc();
-        error_log("Données brutes de ovri_logs: " . print_r($logData, true));
         
+        // Décoder la réponse d'Ovri
+        $responseData = json_decode($logData['response_body'], true);
+        error_log("Réponse Ovri décodée: " . print_r($responseData, true));
+        
+        // Décoder les données de la requête originale
         $requestData = json_decode($logData['request_body'], true);
-        error_log("Données request_body décodées: " . print_r($requestData, true));
+        error_log("Données requête originale: " . print_r($requestData, true));
         
-        // Récupérer les données nécessaires
-        $MerchantRef = $requestData['RefOrder'] ?? null;
-        $amount = $requestData['amount'] ?? null;
-        $ipnURL = $requestData['ipnURL'] ?? null;
+        // Extraire les URLs et autres données nécessaires
         $urlOK = $requestData['urlOK'] ?? null;
+        $urlKO = $requestData['urlKO'] ?? null;
+        $ipnURL = $requestData['ipnURL'] ?? null;
         $merchantKey = $requestData['MerchantKey'] ?? null;
-        
-        error_log("Données extraites du request_body:");
-        error_log("- MerchantRef: " . ($MerchantRef ?? 'non défini'));
-        error_log("- Amount: " . ($amount ?? 'non défini'));
-        error_log("- IPN URL: " . ($ipnURL ?? 'non défini'));
+        $refOrder = $requestData['RefOrder'] ?? null;
+        $amount = $requestData['amount'] ?? null;
+
+        error_log("URLs extraites:");
         error_log("- URL OK: " . ($urlOK ?? 'non défini'));
-        error_log("- MerchantKey: " . ($merchantKey ? 'présent' : 'non défini'));
+        error_log("- URL KO: " . ($urlKO ?? 'non défini'));
+        error_log("- IPN URL: " . ($ipnURL ?? 'non défini'));
         
-        if ($MerchantRef) {
-            error_log("🔄 Préparation de l'envoi IPN");
+        // Vérifier le statut de la transaction
+        if (isset($responseData['Status']) && $responseData['Status'] === '2') {
+            error_log("✓ Statut de paiement validé (Status = 2)");
+            
             // Préparer les données pour l'IPN
             $ipnData = [
-                'MerchantRef' => $MerchantRef,
+                'MerchantRef' => $refOrder,
                 'Amount' => $amount,
                 'TransId' => $TransId,
                 'Status' => 'Success',
                 'ipnURL' => $ipnURL,
                 'MerchantKey' => $merchantKey
             ];
-            error_log("Données IPN préparées: " . print_r($ipnData, true));
             
-            // Envoyer l'IPN
-            error_log("📤 Tentative d'envoi IPN...");
+            error_log("📤 Envoi de l'IPN avec données: " . print_r($ipnData, true));
             $ipnResult = sendIpnNotification($ipnData);
             error_log("Résultat envoi IPN: " . ($ipnResult ? "✓ Succès" : "❌ Échec"));
             
-            // Redirection finale
+            // Redirection vers urlOK
             if ($urlOK) {
-                error_log("➡️ Redirection vers l'URL du marchand: " . $urlOK);
+                error_log("➡️ Redirection vers urlOK: " . $urlOK);
                 header('Location: ' . $urlOK);
                 error_log("=== FIN SUCCESS.PHP - Redirection effectuée ===");
                 exit;
             } else {
-                error_log("❌ Erreur: URL OK non définie, impossible de rediriger");
+                error_log("❌ Erreur: urlOK non trouvée dans request_body");
             }
         } else {
-            error_log("❌ Erreur: MerchantRef non trouvé dans les données de la transaction");
+            error_log("❌ Statut de paiement invalide: " . ($responseData['Status'] ?? 'non défini'));
+            
+            // Redirection vers urlKO en cas de statut invalide
+            if ($urlKO) {
+                error_log("➡️ Redirection vers urlKO (statut invalide): " . $urlKO);
+                header('Location: ' . $urlKO);
+                error_log("=== FIN SUCCESS.PHP - Redirection vers KO effectuée ===");
+                exit;
+            } else {
+                error_log("❌ Erreur: urlKO non trouvée dans request_body");
+            }
         }
     } else {
         error_log("❌ Aucune transaction trouvée dans ovri_logs pour TransId: " . $TransId);
