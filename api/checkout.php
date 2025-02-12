@@ -11,21 +11,32 @@ function updatelogs($reqbody, $resbody, $http_code)
     global $connection;
 
     // Assuming 'TransactionId' is a key in $resbody
-     $transaction_id = $resbody['TransactionId'] ?? $resbody['transactionId'] ?? null;
-
+    $transaction_id = $resbody['TransactionId'] ?? $resbody['transactionId'] ?? null;
     $request_type = 'via card';
     $request_body = json_encode($reqbody);
-    $response_body = json_encode($resbody); // Now properly encoding response body
+    $response_body = json_encode($resbody);
     $usertoken = $reqbody['MerchantKey'];
 
-    // Prepare the query to avoid SQL injection
-    $stmt = $connection->prepare("INSERT INTO `ovri_logs` (`transaction_id`, `request_type`, `request_body`, `response_body`, `http_code`, `token`) VALUES (?, ?, ?, ?, ?, ?)");
+    // Mettre à jour la ligne existante au lieu d'en créer une nouvelle
+    $stmt = $connection->prepare("UPDATE `ovri_logs` 
+                                SET request_body = ?,
+                                    response_body = ?,
+                                    http_code = ?
+                                WHERE token = ? 
+                                ORDER BY created_at DESC 
+                                LIMIT 1");
+    
     if ($stmt === false) {
         die("Failed to prepare query.");
     }
 
     // Bind parameters to the prepared statement
-    $stmt->bind_param("ssssss", $transaction_id, $request_type, $request_body, $response_body, $http_code, $usertoken);
+    $stmt->bind_param("ssis", 
+        $request_body,
+        $response_body,
+        $http_code,
+        $usertoken
+    );
 
     // Execute the query
     $stmt->execute();
