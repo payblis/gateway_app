@@ -211,7 +211,6 @@ error_log("=== FIN PAYMENT.PHP - Redirection vers le formulaire de paiement ==="
                 <button type="submit" class="btn btn-primary btn-block">Pay <?php echo  $MyVars['amount'] ?> EUR</button>
             </form>
 
-            <!-- <p class="text-center text-muted small mt-3">By submitting this form, you agree to the <a href="#">Privacy Policy</a></p> -->
             <div class="card-footer">
                 <div class="d-flex justify-content-center">
                     <img src="https://pay.payblis.com/wp-content/uploads/2025/01/3d-secure-1.png" class="img-fluid mx-2" width="100px" alt="">
