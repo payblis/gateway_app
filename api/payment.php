@@ -38,8 +38,6 @@ $requiredFields = [
     'Customer_Email',
     'Customer_Name',
     'Customer_FirstName',
-    'country',
-    'userIP',
     'lang',
     'urlOK',
     'urlKO',

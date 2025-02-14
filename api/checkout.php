@@ -85,7 +85,6 @@ $myrequest = array(
     'edMonth' => $expMonth,
     'edYear' => $expYear,
     'cvv' => $CVN,
-    'customerIP' => $UserIP,
     'urlIPN' => 'https://pay.payblis.com/api/callback_ovri.php',
     'urlOK' => 'https://pay.payblis.com/api/success.php',
     'urlKO' => 'https://pay.payblis.com/api/failed.php',
