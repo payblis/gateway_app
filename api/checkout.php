@@ -246,14 +246,21 @@ if ($resultDecode['code'] == 'success') {
     header('Location: ' . $urlKO);
 } elseif ($resultDecode['code'] == 'pending3ds') {
     $http_code = 101;
+    
+    // Extraire le transactionId de la réponse
+    $transactionId = $resultDecode['transactionId'] ?? null;
+    
+    // Mettre à jour les logs avec le transactionId
     updatelogs($MyVars, $resultDecode, $http_code);
 
     error_log("Tentative d'envoi IPN depuis checkout.php - Status: Pending3DS");
     $ipnData = [
-        'TransId' => $resultDecode['TransactionId'] ?? null,
+        'TransId' => $transactionId,
         'MerchantRef' => $RefOrder,
         'Amount' => $amount,
-        'Status' => 'Pending3DS'
+        'Status' => 'Pending3DS',
+        'ipnURL' => $MyVars['ipnURL'] ?? null,
+        'MerchantKey' => $MyVars['MerchantKey']
     ];
     
     try {
@@ -263,8 +270,8 @@ if ($resultDecode['code'] == 'success') {
         error_log("Erreur lors de l'envoi IPN: " . $e->getMessage());
     }
 
-    $embeddedB64 = base64_decode($resultDecode['embeddedB64']);
-    echo $embeddedB64;
+    // Afficher la page 3DS
+    echo base64_decode($resultDecode['embeddedB64']);
 }
 
 error_log("=== FIN CHECKOUT.PHP ===");

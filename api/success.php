@@ -15,9 +15,15 @@ error_log("TransId reçu: " . ($TransId ?? 'non défini'));
 
 if ($TransId) {
     error_log("🔍 Recherche de la transaction dans ovri_logs pour TransId: " . $TransId);
-    $query = "SELECT * FROM ovri_logs WHERE transaction_id = ?";
+    $query = "SELECT * FROM ovri_logs 
+              WHERE transaction_id = ? 
+              OR response_body LIKE ? 
+              OR response_body LIKE ?";
+
+    $searchPattern1 = '%"transactionId":"' . $TransId . '"%';
+    $searchPattern2 = '%"TransactionId":"' . $TransId . '"%';
     $stmt = $connection->prepare($query);
-    $stmt->bind_param("s", $TransId);
+    $stmt->bind_param("sss", $TransId, $searchPattern1, $searchPattern2);
     $stmt->execute();
     $result = $stmt->get_result();
     
